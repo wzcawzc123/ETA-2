@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build-apks:
-    name: 构建 Debug 与 Release APK
+    name: 全量测试 + 构建 Debug 与 Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -42,6 +42,13 @@ jobs:
 
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
+
+      # 全量单测（638 个，含 Robolectric）只能在 x86_64 运行，
+      # 本机 aarch64 跑不了，因此测试门禁只放在 CI。
+      - name: 运行全量单元测试（含 Robolectric）
+        run: >-
+          ./gradlew --no-daemon --no-configuration-cache
+          :app:testDebugUnitTest
 
       - name: 还原发布证书
         env:
