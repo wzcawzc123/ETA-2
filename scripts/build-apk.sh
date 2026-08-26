@@ -18,7 +18,7 @@ sleep 2
 setsid sh -c "GRADLE_USER_HOME=$GRADLE_USER_HOME $GRADLE --no-daemon \
   -Dorg.gradle.jvmargs='-Xmx1536m -Dfile.encoding=UTF-8' \
   -Dkotlin.daemon.jvm.options=-Xmx1024m \
-  :app:$TASK --console=plain > $LOG 2>&1" < /dev/null &
+  -Peta.mirror=true :app:$TASK --console=plain > $LOG 2>&1" < /dev/null &
 echo "== 构建已启动 (PID $!) | 任务: :app:$TASK | 日志: $LOG =="
 
 # 3) 轮询直到出结果（最长 10 分钟）

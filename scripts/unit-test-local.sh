@@ -24,4 +24,4 @@ for f in $(find app/src/test -name "*Test.kt" | sort); do
 done
 echo "== 纯 JVM 测试类: $COUNT 个，跳过 Robolectric 类: $SKIP 个 =="
 # shellcheck disable=SC2086
-exec $GRADLE --no-daemon :app:testDebugUnitTest $TESTS_ARGS
+exec $GRADLE --no-daemon -Peta.mirror=true :app:testDebugUnitTest $TESTS_ARGS
