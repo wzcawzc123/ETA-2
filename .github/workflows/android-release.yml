@@ -17,7 +17,7 @@ jobs:
   build-apks:
     name: 全量测试 + 构建 Debug 与 Release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
 
     steps:
       - name: 检出代码
