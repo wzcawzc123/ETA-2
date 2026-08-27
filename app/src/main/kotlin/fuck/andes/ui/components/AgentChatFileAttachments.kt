@@ -58,10 +58,15 @@ import top.yukonga.miuix.kmp.theme.LocalDismissState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.window.WindowListPopup
+import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
 
 internal val ChatInputPopupMargin = 8.dp
 internal val ChatInputActionSize = 40.dp
 internal val ChatInputActionIconSize = 24.dp
+internal val maxMediaItems: Int = 9
 
 @Composable
 internal fun AgentAttachmentPickerButton(
@@ -78,9 +83,9 @@ internal fun AgentAttachmentPickerButton(
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val photoPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxMediaItems),
+    ) { uris ->
+        uris.forEach { uri ->
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
@@ -89,6 +94,13 @@ internal fun AgentAttachmentPickerButton(
             }
             onAttachImage(uri.toString())
         }
+    }
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { success ->
+        if (success) cameraUri?.let { onAttachImage(it.toString()) }
+        cameraUri = null
     }
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
@@ -126,6 +138,7 @@ internal fun AgentAttachmentPickerButton(
         ) {
             val dismiss = LocalDismissState.current
             val options = listOf(
+                stringResource(R.string.attachment_camera),
                 stringResource(R.string.attachment_image),
                 stringResource(R.string.attachment_file),
                 stringResource(R.string.attachment_folder),
@@ -141,14 +154,21 @@ internal fun AgentAttachmentPickerButton(
                         onSelectedIndexChange = {
                             dismiss?.invoke()
                             when (index) {
-                                0 -> photoPicker.launch(
+                                0 -> {
+                                    val uri = createCameraImageUri(context)
+                                    if (uri != null) {
+                                        cameraUri = uri
+                                        cameraLauncher.launch(uri)
+                                    }
+                                }
+                                1 -> photoPicker.launch(
                                     PickVisualMediaRequest(
                                         ActivityResultContracts.PickVisualMedia.ImageOnly
                                     )
                                 )
-                                1 -> filePicker.launch(arrayOf("*/*"))
-                                2 -> folderPicker.launch(null)
-                                3 -> {
+                                2 -> filePicker.launch(arrayOf("*/*"))
+                                3 -> folderPicker.launch(null)
+                                4 -> {
                                     pathInput = ""
                                     showPathDialog = true
                                 }
@@ -361,3 +381,9 @@ internal class InputPopupPositionProvider(
 
     override fun getMargins(): PaddingValues = PaddingValues(vertical = ChatInputPopupMargin)
 }
+
+private fun createCameraImageUri(context: Context): Uri? = runCatching {
+    val dir = File(context.cacheDir, "camera").apply { if (!exists()) mkdirs() }
+    val file = File(dir, "cam_" + System.currentTimeMillis() + ".jpg")
+    FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+}.getOrNull()

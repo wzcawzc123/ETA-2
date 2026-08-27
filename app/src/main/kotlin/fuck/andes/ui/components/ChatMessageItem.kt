@@ -301,6 +301,7 @@ internal fun ChatMessageItem(
             retainedStreamingState = null,
             showCopyAction = showCopyAction,
             showMessageActions = showMessageActions,
+            showRetryOnFailure = message.code == SystemNoticeCode.RuntimeFailed,
             messageActionsEnabled = messageActionsEnabled,
             onDelete = { onDeleteMessage(message.id) },
             onRegenerate = { onRegenerateMessage(message.id) },
@@ -646,6 +647,7 @@ private fun AgentMessageBlock(
     retainedStreamingState: StreamingMarkdownState?,
     showCopyAction: Boolean,
     showMessageActions: Boolean,
+    showRetryOnFailure: Boolean = false,
     messageActionsEnabled: Boolean,
     onDelete: () -> Unit,
     onRegenerate: () -> Unit,
@@ -748,7 +750,7 @@ private fun AgentMessageBlock(
                         },
                     )
                 }
-                if (showMessageActions) {
+                if (showMessageActions || showRetryOnFailure) {
                     TooltipBox(text = stringResource(R.string.ui_regenerate_2e1905), enabled = messageActionsEnabled) {
                         IconButton(
                             onClick = onRegenerate,
@@ -764,6 +766,7 @@ private fun AgentMessageBlock(
                             )
                         }
                     }
+                    if (showMessageActions) {
                     TooltipBox(text = stringResource(R.string.ui_delete_3755f5), enabled = messageActionsEnabled) {
                         IconButton(
                             onClick = onDelete,
@@ -778,6 +781,7 @@ private fun AgentMessageBlock(
                                 tint = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f),
                             )
                         }
+                    }
                     }
                 }
             }
