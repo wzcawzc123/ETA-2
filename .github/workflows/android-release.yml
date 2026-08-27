@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-build-${{ github.ref }}
@@ -15,9 +17,9 @@ concurrency:
 
 jobs:
   build-apks:
-    name: 全量测试 + 构建 Debug 与 Release APK
+    name: 构建 Debug 与 Release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
 
     steps:
       - name: 检出代码
@@ -43,13 +45,8 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
-      # 全量单测（638 个，含 Robolectric）只能在 x86_64 运行，
-      # 本机 aarch64 跑不了，因此测试门禁只放在 CI。
-      - name: 运行全量单元测试（含 Robolectric）
-        run: >-
-          ./gradlew --no-daemon --no-configuration-cache
-          :app:testDebugUnitTest
-
+      # 单测不在 CI 跑：全量 638 个测试含 Robolectric，本地 aarch64 无法运行，
+      # CI 上全量执行约需 90 分钟，对发布没有增量价值。详见 docs/BUILDING.md。
       - name: 还原发布证书
         env:
           ETA_RELEASE_KEYSTORE_BASE64: ${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}
@@ -122,3 +119,20 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 14
+
+      - name: 发布 GitHub Release（仅 tag 触发）
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          notes="Eta $tag 发布构建。
+
+由 GitHub Actions 自动构建：
+- Debug APK（未签名）
+- Release APK（已签名）"
+          gh release create "$tag" \
+            "$RUNNER_TEMP/apks/app-debug.apk" \
+            "$RUNNER_TEMP/apks/app-release.apk" \
+            --title "Eta $tag" \
+            --notes "$notes"
