@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -36,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.R as LucideR
 import fuck.andes.ui.model.AgentContextUsageUi
 import fuck.andes.ui.model.AgentModelOptionUi
@@ -51,6 +54,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
 import top.yukonga.miuix.kmp.basic.RichTooltipBox
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TooltipAnchorPosition
 import top.yukonga.miuix.kmp.basic.rememberTooltipState
@@ -65,6 +69,7 @@ internal fun AgentModelPickerButton(
     popupAnchorTopPx: Int,
     popupMaxHeight: Dp,
     onModelSelected: (String) -> Unit,
+    onVisionToggled: (String, String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showPopup by remember { mutableStateOf(false) }
@@ -127,6 +132,7 @@ internal fun AgentModelPickerButton(
                     showPopup = false
                     onModelSelected(modelId)
                 },
+                onVisionToggled = onVisionToggled,
             )
         }
     }
@@ -138,6 +144,7 @@ private fun ModelPickerPopupContent(
     expandedProviderIds: Set<String>,
     onProviderExpandedChange: (String, Boolean) -> Unit,
     onModelSelected: (String) -> Unit,
+    onVisionToggled: (String, String, Boolean) -> Unit,
 ) {
     ListPopupColumn {
         state.providerGroups.forEachIndexed { groupIndex, group ->
@@ -158,6 +165,7 @@ private fun ModelPickerPopupContent(
                         model = model,
                         selected = model.id == state.selectedModel?.id,
                         onClick = { onModelSelected(model.id) },
+                        onVisionToggled = onVisionToggled,
                     )
                 }
             }
@@ -212,6 +220,7 @@ private fun ModelPickerRow(
     model: AgentModelOptionUi,
     selected: Boolean,
     onClick: () -> Unit,
+    onVisionToggled: (String, String, Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -229,13 +238,28 @@ private fun ModelPickerRow(
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = model.displayName,
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = model.displayName,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (model.supportsVision) "支持图片输入" else "纯文本",
+                style = MiuixTheme.textStyles.body2.copy(fontSize = 11.sp),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Switch(
+            checked = model.supportsVision,
+            onCheckedChange = { vision ->
+                onVisionToggled(model.providerId, model.id, vision)
+            },
+            modifier = Modifier.scale(0.75f),
         )
         if (selected) {
             Spacer(modifier = Modifier.width(8.dp))

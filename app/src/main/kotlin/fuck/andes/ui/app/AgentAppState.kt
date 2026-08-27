@@ -36,8 +36,10 @@ import fuck.andes.agent.skill.SkillRuntime
 import fuck.andes.config.Prefs
 import fuck.andes.core.AndroidAgentLogger
 import fuck.andes.core.safeLogType
+import fuck.andes.data.model.Model
 import fuck.andes.data.model.ModelReasoningCapabilities
 import fuck.andes.data.model.ReasoningEffort
+import fuck.andes.data.repository.ModelRepository
 import fuck.andes.data.repository.AgentMemoryRepository
 import fuck.andes.data.repository.ProviderRepository
 import fuck.andes.data.repository.RuntimeConfigRepository
@@ -667,6 +669,37 @@ internal class AgentAppState(
             )
         )
         if (selectedConversationId != null) persistConversations()
+    }
+
+    /**
+     * 切换模型的图片输入能力声明（attachment / inputModalities ± "image"）。
+     * 关闭后运行时按纯文本处理：工具截图不进入会话、read_image 拒绝、observe_screen 强制去截图。
+     */
+    fun setModelVision(providerId: String, modelId: String, vision: Boolean) {
+        if (homeState.isStreaming) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val provider = ProviderRepository.providerById(providerId) ?: return@launch
+                val model = provider.models.firstOrNull { it.id == modelId } ?: return@launch
+                ModelRepository.saveModel(
+                    provider.id,
+                    model.copy(
+                        attachment = vision,
+                        inputModalities = if (vision) {
+                            (model.inputModalities + Model.IMAGE_MODALITY).distinct()
+                        } else {
+                            model.inputModalities.filterNot {
+                                it.equals(Model.IMAGE_MODALITY, ignoreCase = true)
+                            }
+                        },
+                    ),
+                )
+                RuntimeConfigRepository.syncToRemotePreferences(FuckAndesApp.serviceInstance)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     fun selectModel(modelId: String) {
