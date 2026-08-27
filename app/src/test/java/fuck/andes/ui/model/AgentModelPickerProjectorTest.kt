@@ -79,6 +79,7 @@ class AgentModelPickerProjectorTest {
             providerSourceType = ProviderSourceTypes.CUSTOM,
             modelId = "model",
             displayName = "Model",
+            supportsVision = true,
             contextWindow = null,
         )
         val expanded = defaultExpandedModelProviderIds(selected)
@@ -95,6 +96,7 @@ class AgentModelPickerProjectorTest {
             providerSourceType = ProviderSourceTypes.CUSTOM,
             modelId = "model",
             displayName = "Model",
+            supportsVision = true,
             contextWindow = 100_000,
         )
         val messages = listOf(
