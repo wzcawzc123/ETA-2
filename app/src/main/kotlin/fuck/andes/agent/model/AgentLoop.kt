@@ -42,8 +42,13 @@ internal class AgentLoop(
 
     fun sensitiveToolCallIdsSnapshot(): Set<String> = sensitiveToolCallIds.toSet()
 
+    private companion object {
+        private const val MAX_EMPTY_CONTENT_RETRIES = 1
+    }
+
     fun run(): Result {
         var round = 1
+        var emptyContentRetries = 0
 
         while (true) {
             runController.throwIfCancelled()
@@ -137,6 +142,28 @@ internal class AgentLoop(
             val content = assistantMessage.optString("content").trim()
             if (content.isBlank() || content == "null") {
                 val finishReason = assistantMessage.optString("finish_reason")
+                // DeepSeek 等推理模型在长 Agent 循环里偶发以 end_turn/stop 结束却未输出正文：
+                // 交付内容可能落在 reasoning_content 而 content 为空。这不应让整个 run 崩溃。
+                // 先做一次温和引导重试；重试仍为空则用思考内容兜底收尾。
+                if (
+                    providerResponse.stopReason == AssistantStopReason.END_TURN &&
+                    emptyContentRetries < MAX_EMPTY_CONTENT_RETRIES
+                ) {
+                    emptyContentRetries += 1
+                    replaceLastAssistantBlankContent()
+                    messages.put(AgentConversationCodec.userTextMessage(emptyContentRetryPrompt()))
+                    round += 1
+                    continue
+                }
+                val fallback = reasoningSnapshot()
+                if (fallback.isNotBlank()) {
+                    onEvent(AgentEvent.RunFinished(round = round, contentChars = fallback.length))
+                    return Result(
+                        content = fallback,
+                        reasoningContent = reasoningSnapshot(),
+                        sensitiveToolCallIds = sensitiveToolCallIds.toSet(),
+                    )
+                }
                 error("模型接口第 $round 轮返回为空${finishReason.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()}")
             }
 
@@ -147,6 +174,19 @@ internal class AgentLoop(
                 sensitiveToolCallIds = sensitiveToolCallIds.toSet(),
             )
         }
+    }
+
+    private fun replaceLastAssistantBlankContent() {
+        val last = messages.optJSONObject(messages.length() - 1) ?: return
+        if (last.optString("role") != "assistant") return
+        if (last.optString("content").isBlank()) {
+            last.put("content", "[模型本轮未输出正文，已引导重试]")
+        }
+    }
+
+    private fun emptyContentRetryPrompt(): String {
+        return "你上一轮结束回复时未输出任何正文（content 为空）。请基于以上已经完成的全部工作，" +
+                "直接给出一句面向用户的中文最终结论。不要重复执行过程，也不要只输出思考过程。"
     }
 
     private fun appendPendingSteeringMessage(): Boolean {
