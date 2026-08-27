@@ -126,11 +126,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$GITHUB_REF_NAME"
-          notes="Eta $tag 发布构建。
-
-由 GitHub Actions 自动构建：
-- Debug APK（未签名）
-- Release APK（已签名）"
+          printf -v notes 'Eta %s 发布构建。\n\n由 GitHub Actions 自动构建：\n- Debug APK（未签名）\n- Release APK（已签名）' "$tag"
           gh release create "$tag" \
             "$RUNNER_TEMP/apks/app-debug.apk" \
             "$RUNNER_TEMP/apks/app-release.apk" \
