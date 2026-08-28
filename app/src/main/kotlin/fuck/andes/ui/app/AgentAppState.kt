@@ -1140,7 +1140,7 @@ internal class AgentAppState(
     fun attachImage(uri: String) {
         scope.launch(Dispatchers.IO) {
             try {
-                val image = AgentImageCodec.fromReference(
+                val image = AgentImageCodec.fromUserAttachment(
                     context = appContext,
                     value = uri,
                     source = "user_attach",
