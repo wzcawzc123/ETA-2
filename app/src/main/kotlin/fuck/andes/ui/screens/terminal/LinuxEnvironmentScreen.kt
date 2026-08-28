@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import fuck.andes.agent.terminal.AlpineEnvironmentInstaller
 import fuck.andes.agent.terminal.AlpineEnvironmentHealth
 import fuck.andes.agent.terminal.AlpineApkAnalysisInstaller
+import fuck.andes.agent.terminal.AlpineAndroguardInstaller
 import fuck.andes.agent.terminal.AlpineEnvironmentState
 import fuck.andes.agent.terminal.AlpineEnvironmentStatus
 import fuck.andes.agent.terminal.AlpineInstallProgress
@@ -29,6 +30,9 @@ import fuck.andes.agent.terminal.AlpinePackageProfiles
 import fuck.andes.agent.terminal.ApkAnalysisInstallProgress
 import fuck.andes.agent.terminal.ApkAnalysisInstallResult
 import fuck.andes.agent.terminal.ApkAnalysisInstallStage
+import fuck.andes.agent.terminal.AndroguardInstallProgress
+import fuck.andes.agent.terminal.AndroguardInstallResult
+import fuck.andes.agent.terminal.AndroguardInstallStage
 import fuck.andes.agent.terminal.PackageProfileInstallProgress
 import fuck.andes.agent.terminal.PackageProfileInstallResult
 import fuck.andes.agent.terminal.PackageProfileInstallStage
@@ -47,6 +51,7 @@ private enum class InstallTarget {
     PYTHON,
     NODE,
     SSH,
+    ANDROGUARD,
 }
 
 private data class PackageProfileUi(
@@ -67,6 +72,9 @@ internal fun LinuxEnvironmentScreen(
     }
     val apkAnalysisInstaller = remember(context.applicationContext) {
         AlpineApkAnalysisInstaller(context.applicationContext)
+    }
+    val androguardInstaller = remember(context.applicationContext) {
+        AlpineAndroguardInstaller(context.applicationContext)
     }
     val packageProfileUis = remember {
         listOf(
@@ -111,6 +119,8 @@ internal fun LinuxEnvironmentScreen(
     }
     var apkAnalysisReady by remember { mutableStateOf(apkAnalysisInstaller.isReady()) }
     var apkAnalysisProgress by remember { mutableStateOf<ApkAnalysisInstallProgress?>(null) }
+    var androguardReady by remember { mutableStateOf(androguardInstaller.isReady()) }
+    var androguardProgress by remember { mutableStateOf<AndroguardInstallProgress?>(null) }
 
     MiuixScaffoldPage(
         title = stringResource(R.string.ui_linux_tool_environment_314d22),
@@ -151,6 +161,7 @@ internal fun LinuxEnvironmentScreen(
                                         it.target to profileInstallers.getValue(it.target).isReady()
                                     }
                                     apkAnalysisReady = apkAnalysisInstaller.isReady()
+                                    androguardReady = androguardInstaller.isReady()
                                     health = null
                                     progress = null
                                     busyTarget = null
@@ -283,6 +294,40 @@ internal fun LinuxEnvironmentScreen(
                                         }
                                         apkAnalysisReady = apkAnalysisInstaller.isReady()
                                         apkAnalysisProgress = null
+                                        busyTarget = null
+                                        resultMessage = result.toMessage(context)
+                                    }
+                                },
+                            )
+                        },
+                    )
+                    BasicComponent(
+                        title = stringResource(R.string.ui_androguard_2b8d4f),
+                        summary = androguardProgress?.summary(context) ?: if (androguardReady) {
+                            context.getString(R.string.linux_androguard_tools_ready)
+                        } else {
+                            context.getString(R.string.linux_androguard_tools_summary)
+                        },
+                        endActions = {
+                            TextButton(
+                                text = when {
+                                    androguardReady -> context.getString(R.string.linux_installed)
+                                    busyTarget == InstallTarget.ANDROGUARD -> context.getString(R.string.linux_installing)
+                                    else -> context.getString(R.string.linux_install)
+                                },
+                                enabled = busyTarget == null && !androguardReady,
+                                onClick = {
+                                    if (busyTarget != null || androguardReady) return@TextButton
+                                    busyTarget = InstallTarget.ANDROGUARD
+                                    resultMessage = null
+                                    coroutineScope.launch {
+                                        val result = androguardInstaller.install { update ->
+                                            withContext(Dispatchers.Main.immediate) {
+                                                androguardProgress = update
+                                            }
+                                        }
+                                        androguardReady = androguardInstaller.isReady()
+                                        androguardProgress = null
                                         busyTarget = null
                                         resultMessage = result.toMessage(context)
                                     }
@@ -439,5 +484,33 @@ private fun ApkAnalysisInstallStage.displayName(context: Context): String = cont
         ApkAnalysisInstallStage.ACTIVATING -> R.string.linux_apk_stage_activating
         ApkAnalysisInstallStage.VERIFYING -> R.string.linux_apk_stage_verifying
         ApkAnalysisInstallStage.COMPLETE -> R.string.linux_apk_stage_complete
+    },
+)
+
+private fun AndroguardInstallProgress.summary(context: Context): String =
+    stage.displayName(context)
+
+private fun AndroguardInstallResult.toMessage(context: Context): String = when (this) {
+    AndroguardInstallResult.AlreadyReady -> context.getString(R.string.linux_androguard_tools_ready_short)
+    AndroguardInstallResult.EnvironmentNotReady -> context.getString(R.string.linux_base_required)
+    is AndroguardInstallResult.InsufficientSpace ->
+        context.getString(
+            R.string.linux_insufficient_space,
+            requiredBytes.toReadableSize(context),
+            availableBytes.toReadableSize(context),
+        )
+    AndroguardInstallResult.Installed -> context.getString(R.string.linux_androguard_tools_installed)
+    is AndroguardInstallResult.Failed -> context.getString(
+        R.string.linux_androguard_stage_failed,
+        stage.displayName(context),
+    )
+}
+
+private fun AndroguardInstallStage.displayName(context: Context): String = context.getString(
+    when (this) {
+        AndroguardInstallStage.CHECKING -> R.string.linux_androguard_stage_checking
+        AndroguardInstallStage.INSTALLING -> R.string.linux_androguard_stage_installing
+        AndroguardInstallStage.VERIFYING -> R.string.linux_androguard_stage_verifying
+        AndroguardInstallStage.COMPLETE -> R.string.linux_androguard_stage_complete
     },
 )
