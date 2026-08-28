@@ -8,11 +8,13 @@ internal object AlpineEnvironmentPaths {
     const val READY_MARKER = ".eta-environment-ready"
     const val COMMON_TOOLS_MARKER = ".eta-common-tools-ready"
     const val APK_ANALYSIS_MARKER = ".eta-apk-analysis-ready"
+    const val ANDROGUARD_MARKER = ".eta-androguard-ready"
     const val PYTHON_TOOLS_MARKER = ".eta-python-tools-ready"
     const val NODE_TOOLS_MARKER = ".eta-node-tools-ready"
     const val SSH_TOOLS_MARKER = ".eta-ssh-tools-ready"
     const val TOOLSET_REVISION = 3
     const val APK_ANALYSIS_REVISION = 1
+    const val ANDROGUARD_REVISION = 1
     const val PYTHON_TOOLS_REVISION = 1
     const val NODE_TOOLS_REVISION = 1
     const val SSH_TOOLS_REVISION = 1
@@ -82,4 +84,20 @@ internal object AlpineEnvironmentPaths {
             }
         }.getOrDefault(false)
     }
+
+    fun androguardReady(rootfsPath: String?): Boolean {
+        if (!commonToolsReady(rootfsPath)) return false
+        val rootfs = File(rootfsPath ?: return false)
+        val marker = File(rootfs, ANDROGUARD_MARKER)
+        if (!marker.isFile) return false
+        return runCatching {
+            marker.useLines { lines ->
+                lines.any { line -> line.trim() == "revision=$ANDROGUARD_REVISION" }
+            }
+        }.getOrDefault(false)
+    }
+
+    /** Androguard venv python（chroot 内路径）。 */
+    fun androguardPythonPath(): String =
+        "/root/.local/share/pipx/venvs/androguard/bin/python"
 }
