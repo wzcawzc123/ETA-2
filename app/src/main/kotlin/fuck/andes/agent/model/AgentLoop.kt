@@ -2,6 +2,8 @@ package fuck.andes.agent.model
 
 import fuck.andes.agent.runtime.AgentEvent
 import fuck.andes.agent.runtime.AgentRunController
+import fuck.andes.core.AndroidAgentLogger
+import fuck.andes.core.safeLogType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,6 +46,11 @@ internal class AgentLoop(
 
     private companion object {
         private const val MAX_EMPTY_CONTENT_RETRIES = 1
+        private const val MAX_PROVIDER_TRANSIENT_RETRIES = 2
+
+        /** 指数退避：第 1 次 1s，第 2 次 2s，封顶 4s。 */
+        private fun providerRetryBackoffMs(attempt: Int): Long =
+            (1_000L shl (attempt - 1)).coerceAtMost(4_000L)
     }
 
     fun run(): Result {
@@ -56,26 +63,59 @@ internal class AgentLoop(
             onEvent(AgentEvent.RoundStarted(round = round, messageCount = messages.length()))
 
             val reasoningLengthBeforeRound = accumulatedReasoning.length
-            val providerResponse = try {
-                provider.complete(
-                    request = ProviderRequest(
-                        config = config,
-                        // 长单次运行按预算裁剪喂给模型的副本（保留最后 user + 最近 N 个完整工具轮）。
-                        messages = AgentLoopContext.trimInRun(messages, config.contextWindow),
-                        tools = tools,
-                    ),
-                    runController = runController,
-                ) { providerEvent ->
-                    if (
-                        providerEvent is ProviderEvent.BlockDelta &&
-                        providerEvent.kind == AssistantBlockKind.THINKING
-                    ) {
-                        accumulatedReasoning.append(providerEvent.delta)
+            var providerResponse: ProviderResponse
+            try {
+                var providerAttempt = 0
+                while (true) {
+                    // 瞬时错误重试：仅在"服务端/网络层瞬时错误"且"本次尚未向 UI 交付任何内容块"
+                    // 时重试。这样既不重复执行工具，也不会在已输出部分内容后重复拼接导致乱序。
+                    var deliveredAnyBlockDelta = false
+                    runController.throwIfCancelled()
+                    val response = try {
+                        provider.complete(
+                            request = ProviderRequest(
+                                config = config,
+                                // 长单次运行按预算裁剪喂给模型的副本（保留最后 user + 最近 N 个完整工具轮）。
+                                messages = AgentLoopContext.trimInRun(messages, config.contextWindow),
+                                tools = tools,
+                            ),
+                            runController = runController,
+                        ) { providerEvent ->
+                            if (providerEvent is ProviderEvent.BlockDelta) {
+                                deliveredAnyBlockDelta = true
+                                if (providerEvent.kind == AssistantBlockKind.THINKING) {
+                                    accumulatedReasoning.append(providerEvent.delta)
+                                }
+                            }
+                            providerEvent.toAgentEvent(round)?.let(onEvent)
+                        }
+                    } catch (throwable: Throwable) {
+                        // 取消优先：用户取消不能被瞬时重试吞掉。
+                        runController.throwIfCancelled()
+                        if (
+                            AgentTransientError.isTransient(throwable) &&
+                            !deliveredAnyBlockDelta &&
+                            providerAttempt < MAX_PROVIDER_TRANSIENT_RETRIES
+                        ) {
+                            providerAttempt += 1
+                            // 日志属于 best-effort，失败不得阻断重试流程或让纯 JVM 单测崩溃。
+                            runCatching {
+                                AndroidAgentLogger.warn(
+                                    "Agent provider transient error, retrying " +
+                                        "(attempt $providerAttempt): ${throwable.safeLogType()}"
+                                )
+                            }
+                            Thread.sleep(providerRetryBackoffMs(providerAttempt))
+                            continue
+                        }
+                        throw throwable
                     }
-                    providerEvent.toAgentEvent(round)?.let(onEvent)
+                    providerResponse = response
+                    break
                 }
             } finally {
                 // 截图只供紧接着的一次推理消费；成功、失败或取消后都不进入后续上下文与归档。
+                // 重试期间保留该消息，确保重试的那次推理仍能消费到同一张工具截图。
                 discardPendingToolImageMessage()
             }
 

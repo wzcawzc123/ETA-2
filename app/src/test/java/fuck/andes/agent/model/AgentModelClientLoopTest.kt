@@ -520,6 +520,69 @@ class AgentModelClientLoopTest {
         assertEquals(toolRounds + 1, provider.requests.size)
     }
 
+    @Test
+    fun transientProviderIOExceptionIsRetriedAndSucceeds() {
+        val provider = ScriptedProvider(
+            responses = listOf<(ProviderRequest, AgentRunController) -> JSONObject>(
+                { _, _ -> throw java.io.IOException("stream was reset: INTERNAL_ERROR") },
+                { _, _ -> assistant(content = "完成", finishReason = "stop") },
+            )
+        )
+
+        val result = AgentModelClient.complete(
+            config = modelConfig(),
+            prompt = "开始",
+            toolExecutor = AgentModelClient.ToolExecutor { error("不应调用工具") },
+            provider = provider,
+        )
+
+        // 第一次瞬时失败，第二次重试成功。
+        assertEquals("完成", result.content)
+        assertEquals(2, provider.requests.size)
+    }
+
+    @Test
+    fun transientErrorExhaustsRetriesThenPropagates() {
+        val throwing: (ProviderRequest, AgentRunController) -> JSONObject =
+            { _, _ -> throw java.io.IOException("stream reset") }
+        val provider = ScriptedProvider(responses = List(3) { throwing })
+
+        val failure = assertThrows(AgentModelExecutionException::class.java) {
+            AgentModelClient.complete(
+                config = modelConfig(),
+                prompt = "开始",
+                toolExecutor = AgentModelClient.ToolExecutor { error("不应调用工具") },
+                provider = provider,
+            )
+        }
+
+        // 1 次初始 + 2 次重试 = 3 次，全部失败后抛出。
+        assertEquals(3, provider.requests.size)
+        assertTrue(failure.cause is java.io.IOException)
+    }
+
+    @Test
+    fun nonTransientProviderErrorIsNotRetried() {
+        val provider = ScriptedProvider(
+            responses = listOf<(ProviderRequest, AgentRunController) -> JSONObject>(
+                { _, _ -> error("provider disconnected") },
+            )
+        )
+
+        val failure = assertThrows(AgentModelExecutionException::class.java) {
+            AgentModelClient.complete(
+                config = modelConfig(),
+                prompt = "开始",
+                toolExecutor = AgentModelClient.ToolExecutor { error("不应调用工具") },
+                provider = provider,
+            )
+        }
+
+        // 非法状态（非瞬时）不重试，仅一次请求即失败。
+        assertEquals(1, provider.requests.size)
+        assertEquals("provider disconnected", failure.cause?.message)
+    }
+
     private class ScriptedProvider(
         private val responses: List<(ProviderRequest, AgentRunController) -> JSONObject>,
     ) : AgentProviderClient {
