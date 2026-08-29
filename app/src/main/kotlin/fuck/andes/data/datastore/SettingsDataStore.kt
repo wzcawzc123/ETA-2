@@ -167,6 +167,9 @@ internal object SettingsDataStore {
     fun factDistillEnabledFlow(): Flow<Boolean> =
         settingsFlow().map { it.factDistillEnabled }
 
+    fun promptCacheEnabledFlow(): Flow<Boolean> =
+        settingsFlow().map { it.promptCacheEnabled }
+
     suspend fun setAppearanceSettings(settings: AppearanceSettings) {
         updateSettings { it.copy(appearance = settings.normalized()) }
     }

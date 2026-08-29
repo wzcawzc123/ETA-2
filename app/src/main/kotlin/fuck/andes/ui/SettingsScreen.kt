@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
@@ -37,6 +38,7 @@ import fuck.andes.agent.accessibility.AgentAccessibilityService
 import fuck.andes.agent.voice.EtaVoiceInteractionService
 import fuck.andes.config.PowerAssistantTarget
 import fuck.andes.config.Prefs
+import fuck.andes.data.datastore.SettingsDataStore
 import fuck.andes.data.repository.ProviderRepository
 import fuck.andes.data.repository.RuntimeConfigRepository
 import fuck.andes.systemizer.GoogleAppSystemizerInstaller
@@ -46,6 +48,8 @@ import fuck.andes.ui.navigation.AppRoute
 import fuck.andes.systemizer.RootManager
 import fuck.andes.systemizer.SystemizerInstallResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -217,6 +221,42 @@ internal fun SettingsScreen(
                         key = Prefs.Keys.AGENT_THINKING_ENABLED,
                         icon = LucideR.drawable.lucide_ic_brain_circuit,
                         iconTint = ColorOSRoyalBlue,
+                    )
+                }
+            }
+
+            // ── 记忆与长对话 ───────────────────────────────────────────
+            item(key = "section_memory") {
+                SmallTitle(stringResource(R.string.settings_memory))
+                Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    DataStoreSwitchPref(
+                        context = context,
+                        title = stringResource(R.string.settings_memory_conversation_summary),
+                        summary = stringResource(R.string.settings_memory_conversation_summary_summary),
+                        icon = LucideR.drawable.lucide_ic_notebook_tabs,
+                        iconTint = ColorOSVividGreen,
+                        checkedFlow = SettingsDataStore::conversationSummaryEnabledFlow,
+                        onToggle = SettingsDataStore::setConversationSummaryEnabled,
+                    )
+                    PrefDivider()
+                    DataStoreSwitchPref(
+                        context = context,
+                        title = stringResource(R.string.settings_memory_fact_distill),
+                        summary = stringResource(R.string.settings_memory_fact_distill_summary),
+                        icon = LucideR.drawable.lucide_ic_sparkles,
+                        iconTint = ColorOSOrange,
+                        checkedFlow = SettingsDataStore::factDistillEnabledFlow,
+                        onToggle = SettingsDataStore::setFactDistillEnabled,
+                    )
+                    PrefDivider()
+                    DataStoreSwitchPref(
+                        context = context,
+                        title = stringResource(R.string.settings_memory_prompt_cache),
+                        summary = stringResource(R.string.settings_memory_prompt_cache_summary),
+                        icon = LucideR.drawable.lucide_ic_layers,
+                        iconTint = ColorOSRoyalBlue,
+                        checkedFlow = SettingsDataStore::promptCacheEnabledFlow,
+                        onToggle = SettingsDataStore::setPromptCacheEnabled,
                     )
                 }
             }
@@ -809,6 +849,42 @@ private fun SwitchPref(
             TintedIcon(icon = icon, tint = iconTint)
         },
         enabled = enabled,
+    )
+}
+
+/**
+ * DataStore 布尔开关（用于 SettingsDataStore 托管的记忆类设置，非 SharedPreferences）。
+ */
+@Composable
+private fun DataStoreSwitchPref(
+    context: Context,
+    title: String,
+    summary: String? = null,
+    icon: Int,
+    iconTint: Color,
+    checkedFlow: () -> Flow<Boolean>,
+    onToggle: suspend (Boolean) -> Unit,
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var checked by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) {
+        checkedFlow().distinctUntilChanged().collect { checked = it }
+    }
+    SwitchPreference(
+        title = title,
+        summary = summary,
+        checked = checked ?: false,
+        onCheckedChange = { value ->
+            if (checked == null) return@SwitchPreference
+            coroutineScope.launch {
+                onToggle(value)
+                checked = value
+            }
+        },
+        startAction = {
+            TintedIcon(icon = icon, tint = iconTint)
+        },
+        enabled = true,
     )
 }
 

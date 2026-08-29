@@ -243,6 +243,7 @@ internal object AgentRuntimeWire {
     private fun requestBundle(request: RunRequest, imageBundles: List<Bundle>): Bundle = Bundle().apply {
         putString(KEY_RUN_ID, request.runId)
         putString(KEY_PROMPT, request.prompt)
+        // 摘要 ≤2000 字符（约 2KB），相对 768KB parcel 预算可忽略；历史本身才是大头。
         request.conversationSummary?.let { putString(KEY_CONVERSATION_SUMMARY, it) }
         putString(KEY_PROVIDER_ID, request.config.providerId)
         putString(KEY_PROVIDER_NAME, request.config.providerName)

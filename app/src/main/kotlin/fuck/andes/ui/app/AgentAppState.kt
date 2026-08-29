@@ -1190,8 +1190,9 @@ internal class AgentAppState(
                 val trimmedTurns = history.take(history.size - windowed.size)
                 val trimmedUsers = AgentHistorySummary.trimmedUserTurnCount(history, windowed)
                 if (!AgentHistorySummary.needsRegeneration(trimmedUsers)) return@launch
-                val existingTurns = ConversationSummaryStore.summarizedTurns(conversationId)
-                val existingSummary = ConversationSummaryStore.summary(conversationId)
+                val existing = ConversationSummaryStore.summaryEntry(conversationId)
+                val existingTurns = existing?.summarizedTurns ?: 0
+                val existingSummary = existing?.summary
                 val summarizer = LlmConversationSummarizer(config, ProviderClientFactory.getClient(config))
                 val newSummary = summarizer.summarize(existingSummary, trimmedTurns)
                 ConversationSummaryStore.upsert(

@@ -7,6 +7,9 @@ import fuck.andes.data.db.FuckAndesDatabase
 /** 长对话滚动摘要持久化（P2）：按会话存取被裁剪轮次的压缩摘要。 */
 internal object ConversationSummaryStore {
 
+    /** memory_search 最多扫描的摘要条数（按更新时间倒序取最近）。 */
+    private const val MAX_SEARCHED_SUMMARIES = 100
+
     @Volatile
     private var applicationContext: Context? = null
 
@@ -28,6 +31,10 @@ internal object ConversationSummaryStore {
     suspend fun summarizedTurns(conversationId: String): Int =
         dao().summary(conversationId)?.summarizedTurns ?: 0
 
+    /** 单次查询同时取回摘要与已覆盖轮数，避免两趟 DB 读。 */
+    suspend fun summaryEntry(conversationId: String): ConversationSummaryEntity? =
+        dao().summary(conversationId)
+
     suspend fun upsert(
         conversationId: String,
         summary: String,
@@ -43,6 +50,6 @@ internal object ConversationSummaryStore {
         )
     }
 
-    suspend fun all(): List<Pair<String, String>> =
-        dao().all().map { it.conversationId to it.summary }
+    suspend fun all(limit: Int = MAX_SEARCHED_SUMMARIES): List<Pair<String, String>> =
+        dao().all(limit).map { it.conversationId to it.summary }
 }

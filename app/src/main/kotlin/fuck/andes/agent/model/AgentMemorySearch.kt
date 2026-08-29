@@ -7,6 +7,10 @@ internal object AgentMemorySearch {
     const val MAX_HITS = 8
     const val MAX_SNIPPET_CHARS = 160
 
+    /** 对外展示的来源名：不暴露内部会话 ID。 */
+    const val SOURCE_SUMMARY = "历史会话摘要"
+    const val SOURCE_MEMORY = "核心记忆"
+
     data class Hit(
         val source: String,
         val snippet: String,
@@ -44,7 +48,7 @@ internal object AgentMemorySearch {
             val score = scoreText(summary, terms)
             if (score > 0) {
                 hits += Hit(
-                    source = "会话摘要($conversationId)",
+                    source = SOURCE_SUMMARY,
                     snippet = summary.trim().take(MAX_SNIPPET_CHARS),
                     score = score,
                 )
@@ -54,7 +58,7 @@ internal object AgentMemorySearch {
             val score = scoreText(heading, terms)
             if (score > 0) {
                 hits += Hit(
-                    source = "核心记忆",
+                    source = SOURCE_MEMORY,
                     snippet = heading.trim().take(MAX_SNIPPET_CHARS),
                     score = score,
                 )

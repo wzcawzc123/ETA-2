@@ -938,6 +938,13 @@
   <string name="skills_choose_package">選擇包含 SKILL.md 的 Skill 包</string>
   <string name="skills_choose_zip">選擇 ZIP Skill 包</string>
   <string name="skills_replace_summary">已有使用者 Skill「%1$s」（%2$s）。取代後會覆寫其目前的所有檔案。</string>
+  <string name="settings_memory">記憶與長對話</string>
+  <string name="settings_memory_conversation_summary">長對話滾動摘要</string>
+  <string name="settings_memory_conversation_summary_summary">把長對話被裁剪的早期輪次壓縮成摘要，注入模型上下文</string>
+  <string name="settings_memory_fact_distill">自動事實沉澱</string>
+  <string name="settings_memory_fact_distill_summary">每次運行後從對話提取穩定事實寫入 MEMORY.md（消耗 token，預設關閉）</string>
+  <string name="settings_memory_prompt_cache">提示詞緩存斷點</string>
+  <string name="settings_memory_prompt_cache_summary">向 Anthropic 系端點注入緩存斷點（需端點支援，預設關閉）</string>
   <string name="settings_context_extensions">上下文與擴充</string>
   <string name="settings_llm_providers">LLM 供應商</string>
   <string name="skills_replace">取代</string>

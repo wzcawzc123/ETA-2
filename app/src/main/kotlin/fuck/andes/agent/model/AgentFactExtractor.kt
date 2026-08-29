@@ -36,17 +36,23 @@ internal object AgentFactRules {
             .take(MAX_FACTS_PER_RUN)
             .toList()
 
-    /** 与 MEMORY.md 已有内容去重 + 长度/数量预算。 */
+    /** 与 MEMORY.md 已有内容做行级双向包含去重 + 长度/数量预算。 */
     fun dedupeAndClamp(
         facts: List<String>,
         existingMemory: String,
         maxFacts: Int = MAX_FACTS_PER_RUN,
-    ): List<String> = facts
-        .map { it.trim().take(MAX_FACT_CHARS) }
-        .filter { it.length >= 3 }
-        .filter { it !in existingMemory }
-        .distinct()
-        .take(maxFacts)
+    ): List<String> {
+        val memoryLines = existingMemory.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+        return facts
+            .map { it.trim().take(MAX_FACT_CHARS) }
+            .filter { it.length >= 3 }
+            .filter { fact -> memoryLines.none { line -> fact in line || line in fact } }
+            .distinct()
+            .take(maxFacts)
+    }
 }
 
 internal class LlmAgentFactExtractor(

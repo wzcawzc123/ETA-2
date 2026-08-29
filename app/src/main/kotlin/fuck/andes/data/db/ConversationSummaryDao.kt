@@ -16,6 +16,6 @@ internal interface ConversationSummaryDao {
     @Query("DELETE FROM conversation_summaries WHERE conversation_id = :conversationId")
     suspend fun delete(conversationId: String)
 
-    @Query("SELECT * FROM conversation_summaries")
-    suspend fun all(): List<ConversationSummaryEntity>
+    @Query("SELECT * FROM conversation_summaries ORDER BY updated_at DESC LIMIT :limit")
+    suspend fun all(limit: Int): List<ConversationSummaryEntity>
 }

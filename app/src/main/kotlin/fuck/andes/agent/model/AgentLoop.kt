@@ -60,7 +60,8 @@ internal class AgentLoop(
                 provider.complete(
                     request = ProviderRequest(
                         config = config,
-                        messages = messages,
+                        // 长单次运行按预算裁剪喂给模型的副本（保留最后 user + 最近 N 个完整工具轮）。
+                        messages = AgentLoopContext.trimInRun(messages, config.contextWindow),
                         tools = tools,
                     ),
                     runController = runController,
