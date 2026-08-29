@@ -86,7 +86,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
@@ -1585,7 +1584,7 @@ private fun ChatRevealAnnotatedText(
         content = text,
         node = node,
         modifier = modifier.smoothTextReveal(revealState),
-        style = style.copy(textMotion = TextMotion.Animated),
+        style = style,
         onTextLayout = { layoutResult, _ ->
             revealState.onTextLayout(text.text, layoutResult)
         },
@@ -1712,11 +1711,7 @@ private fun ChatCodeBlock(
             }
         Text(
             text = code,
-            style = if (revealState != null) {
-                style.copy(textMotion = TextMotion.Animated)
-            } else {
-                style
-            },
+            style = style,
             color = MiuixTheme.colorScheme.onSurface,
             modifier = codeModifier,
             onTextLayout = revealState?.let { state ->
@@ -1858,7 +1853,7 @@ private fun ChatMarkdownTableCell(
     )
     Text(
         text = text,
-        style = style.copy(textMotion = TextMotion.Animated),
+        style = style,
         color = MiuixTheme.colorScheme.onSurface,
         maxLines = maxLines,
         overflow = overflow,
