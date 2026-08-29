@@ -5,6 +5,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -22,6 +25,7 @@ import androidx.compose.ui.unit.Constraints
 import java.text.BreakIterator
 import java.util.Locale
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
@@ -146,7 +150,6 @@ internal class SmoothTextRevealCoordinator {
                 val totalBacklog = records.values.sumOf { candidate ->
                     max(0.0, (candidate.targetCount - candidate.progress).toDouble())
                 }.toFloat()
-                val previousVisibleCount = ceil(record.progress).toInt()
                 record.progress = advanceSmoothReveal(
                     current = record.progress,
                     target = record.targetCount,
@@ -156,11 +159,7 @@ internal class SmoothTextRevealCoordinator {
                 if (record.progress > 0f && record.key !in startedState.value) {
                     startedState.value = startedState.value + record.key
                 }
-                // 去掉部分字素淡入后，可见内容只在跨越字素边界时变化；
-                // 未跨边界的帧不再请求重绘，避免每帧重复整段裁剪绘制。
-                if (ceil(record.progress).toInt() != previousVisibleCount) {
-                    record.node?.onRevealDataChanged()
-                }
+                record.node?.onRevealDataChanged()
             }
         }
     }
@@ -274,9 +273,11 @@ private data class SmoothTextRevealElement(
 internal class SmoothTextRevealNode(
     private var state: SmoothTextRevealState,
 ) : Modifier.Node(), DrawModifierNode, LayoutModifierNode {
+    private val alphaPaint = Paint()
     private var cachedLayoutResult: TextLayoutResult? = null
     private var cachedFullCount = -1
-    private var cachedRevealPath: Path? = null
+    private var cachedFullPath: Path? = null
+    private var cachedNextPath: Path? = null
     private var cachedVisibleHeight = -1
 
     override fun onAttach() {
@@ -330,41 +331,70 @@ internal class SmoothTextRevealNode(
             return
         }
 
-        // 单次绘制：整段内容只画一遍，裁剪到已揭示的字素前缀上。
-        // 部分字素不再做 saveLayer 淡入（120Hz 下仅持续 1-2 帧，肉眼不可见），
-        // 从而消除每帧的离屏图层分配与第二次整段绘制。
-        val visibleCount = ceil(snapshot.progress).toInt().coerceIn(0, targetCount)
-        if (visibleCount == 0) return
-        ensureRevealPath(snapshot, visibleCount)
-        cachedRevealPath?.let { path ->
+        val fullCount = floor(snapshot.progress).toInt().coerceIn(0, targetCount)
+        ensurePaths(snapshot, fullCount)
+        cachedFullPath?.let { path ->
             clipPath(path) { contentScope.drawContent() }
+        }
+
+        val partialAlpha = (snapshot.progress - fullCount).coerceIn(0f, 1f)
+        if (partialAlpha > 0f) {
+            cachedNextPath?.let { path ->
+                clipPath(path) {
+                    alphaPaint.alpha = partialAlpha
+                    drawContext.canvas.saveLayer(
+                        Rect(Offset.Zero, size),
+                        alphaPaint,
+                    )
+                    try {
+                        contentScope.drawContent()
+                    } finally {
+                        drawContext.canvas.restore()
+                    }
+                }
+            }
         }
     }
 
-    private fun ensureRevealPath(snapshot: RevealDrawSnapshot, visibleCount: Int) {
+    private fun ensurePaths(snapshot: RevealDrawSnapshot, fullCount: Int) {
         val sameLayout = cachedLayoutResult === snapshot.layoutResult
-        if (sameLayout && cachedFullCount == visibleCount) return
+        if (sameLayout && cachedFullCount == fullCount) return
 
-        val textLength = snapshot.layoutResult.layoutInput.text.length
-        val visibleEnd = snapshot.boundaries[visibleCount].coerceIn(0, textLength)
-        if (sameLayout && visibleCount == cachedFullCount + 1) {
-            // 增量：新前缀 = 旧前缀 ∪ 新出现的字形，只追加一段路径。
-            val nextStart = snapshot.boundaries[cachedFullCount].coerceIn(0, textLength)
-            val nextPath = snapshot.layoutResult.getPathForRange(nextStart, visibleEnd)
-            val union = cachedRevealPath
-            if (union != null) {
-                union.addPath(nextPath)
-            } else {
-                cachedRevealPath = snapshot.layoutResult.getPathForRange(0, visibleEnd)
+        if (sameLayout && fullCount == cachedFullCount + 1) {
+            val completedPath = cachedNextPath
+            if (completedPath != null) {
+                val accumulatedPath = cachedFullPath ?: Path()
+                accumulatedPath.addPath(completedPath)
+                cachedFullPath = accumulatedPath
             }
-            cachedFullCount = visibleCount
+            cachedFullCount = fullCount
+            cachedNextPath = nextGraphemePath(snapshot, fullCount)
             return
         }
 
         cachedLayoutResult = snapshot.layoutResult
-        cachedFullCount = visibleCount
-        cachedRevealPath = if (visibleEnd > 0) {
-            snapshot.layoutResult.getPathForRange(0, visibleEnd)
+        cachedFullCount = fullCount
+        val textLength = snapshot.layoutResult.layoutInput.text.length
+        val fullEnd = snapshot.boundaries[fullCount].coerceIn(0, textLength)
+        cachedFullPath = if (fullEnd > 0) {
+            snapshot.layoutResult.getPathForRange(0, fullEnd)
+        } else {
+            null
+        }
+        cachedNextPath = nextGraphemePath(snapshot, fullCount)
+    }
+
+    private fun nextGraphemePath(
+        snapshot: RevealDrawSnapshot,
+        fullCount: Int,
+    ): Path? {
+        val textLength = snapshot.layoutResult.layoutInput.text.length
+        val start = snapshot.boundaries.getOrNull(fullCount)?.coerceIn(0, textLength)
+            ?: return null
+        val end = snapshot.boundaries.getOrNull(fullCount + 1)?.coerceIn(start, textLength)
+            ?: return null
+        return if (end > start) {
+            snapshot.layoutResult.getPathForRange(start, end)
         } else {
             null
         }
@@ -373,7 +403,8 @@ internal class SmoothTextRevealNode(
     private fun clearPathCache() {
         cachedLayoutResult = null
         cachedFullCount = -1
-        cachedRevealPath = null
+        cachedFullPath = null
+        cachedNextPath = null
     }
 }
 
