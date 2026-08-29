@@ -24,6 +24,12 @@ import fuck.andes.agent.model.AgentFileReference
 import fuck.andes.agent.model.AgentFileReferenceKind
 import fuck.andes.agent.model.AgentFileReferencePolicy
 import fuck.andes.agent.model.AgentFileReferencePromptCodec
+import fuck.andes.agent.model.AgentHistorySummary
+import fuck.andes.agent.model.AgentHistoryWindow
+import fuck.andes.agent.model.AgentFactRules
+import fuck.andes.agent.model.LlmAgentFactExtractor
+import fuck.andes.agent.model.LlmConversationSummarizer
+import fuck.andes.agent.model.ProviderClientFactory
 import fuck.andes.agent.runtime.AgentEvent
 import fuck.andes.agent.runtime.AgentExternalArchivePayload
 import fuck.andes.agent.runtime.AgentRunArchiveStore
@@ -39,8 +45,12 @@ import fuck.andes.core.safeLogType
 import fuck.andes.data.model.Model
 import fuck.andes.data.model.ModelReasoningCapabilities
 import fuck.andes.data.model.ReasoningEffort
+import fuck.andes.data.datastore.SettingsDataStore
 import fuck.andes.data.repository.ModelRepository
 import fuck.andes.data.repository.AgentMemoryRepository
+import fuck.andes.data.repository.AgentMemoryMutation
+import fuck.andes.data.repository.AgentMemoryWriteResult
+import fuck.andes.data.repository.ConversationSummaryStore
 import fuck.andes.data.repository.EtaBackupRepository
 import fuck.andes.data.repository.EtaBackupSummary
 import fuck.andes.data.repository.ProviderRepository
@@ -1101,6 +1111,7 @@ internal class AgentAppState(
             } else {
                 ReasoningEffort.OFF
             }
+            val promptCacheEnabled = SettingsDataStore.settings().promptCacheEnabled
             val config = RuntimeConfigRepository.currentRuntimeConfig()?.copy(
                 terminalTools = agentBooleanForUi(Prefs.Keys.AGENT_TERMINAL_TOOLS),
                 browserTools = agentBooleanForUi(Prefs.Keys.AGENT_BROWSER_TOOLS),
@@ -1111,6 +1122,7 @@ internal class AgentAppState(
                     agentBooleanForUi(Prefs.Keys.AGENT_DEVICE_SENSITIVE_ACTION_TOOLS),
                 thinkingEnabled = permittedReasoningEffort.enablesReasoning,
                 reasoningEffort = permittedReasoningEffort,
+                enablePromptCache = promptCacheEnabled,
             )
             if (config == null) {
                 withContext(Dispatchers.Main) {
@@ -1134,6 +1146,9 @@ internal class AgentAppState(
                     source = "user_attach",
                 )
             }
+            val conversationSummary = runCatching {
+                ConversationSummaryStore.summary(conversationId)
+            }.getOrNull()
             val result = AgentRuntimeClient(appContext, AndroidAgentLogger).run(
                 request = AgentRuntimeWire.RunRequest(
                     runId = runId,
@@ -1141,6 +1156,7 @@ internal class AgentAppState(
                     config = config,
                     images = modelImages,
                     history = history,
+                    conversationSummary = conversationSummary,
                     handoff = AgentRuntimeWire.EntryHandoff(
                         id = runId,
                         source = AgentRuntimeWire.AGENT_UI_HANDOFF_SOURCE,
@@ -1151,6 +1167,71 @@ internal class AgentAppState(
             )
             withContext(Dispatchers.Main) {
                 applyRunResult(runId, result, acknowledgeRuntimeResult = true)
+            }
+            maybeRegenerateConversationSummary(conversationId, history, config)
+            maybeDistillFacts(conversationId, prompt, result)
+        }
+    }
+
+    /**
+     * P2：长对话被裁剪到窗口后，异步生成/合并滚动摘要（fire-and-forget，失败静默）。
+     * 本次 run 使用旧摘要（可能为 null），新摘要从下次 run 开始注入。
+     */
+    private fun maybeRegenerateConversationSummary(
+        conversationId: String,
+        history: List<AgentModelClient.ConversationMessage>,
+        config: AgentModelClient.ModelConfig,
+    ) {
+        scope.launch {
+            runCatching {
+                if (!SettingsDataStore.settings().conversationSummaryEnabled) return@launch
+                val windowed = AgentHistoryWindow.trim(history, config.contextWindow)
+                if (windowed.size >= history.size) return@launch
+                val trimmedTurns = history.take(history.size - windowed.size)
+                val trimmedUsers = AgentHistorySummary.trimmedUserTurnCount(history, windowed)
+                if (!AgentHistorySummary.needsRegeneration(trimmedUsers)) return@launch
+                val existingTurns = ConversationSummaryStore.summarizedTurns(conversationId)
+                val existingSummary = ConversationSummaryStore.summary(conversationId)
+                val summarizer = LlmConversationSummarizer(config, ProviderClientFactory.getClient(config))
+                val newSummary = summarizer.summarize(existingSummary, trimmedTurns)
+                ConversationSummaryStore.upsert(
+                    conversationId,
+                    newSummary,
+                    existingTurns + trimmedUsers,
+                )
+            }
+        }
+    }
+
+    /**
+     * P3：自动事实沉淀（默认关闭）。run 成功后从用户输入与回答提取稳定事实，
+     * 去重后经 MEMORY.md 原子写追加（revision 冲突则放弃），全程静默失败。
+     */
+    private fun maybeDistillFacts(
+        conversationId: String,
+        userText: String,
+        result: AgentRuntimeWire.RunResult,
+    ) {
+        if (!result.ok) return
+        scope.launch {
+            runCatching {
+                if (!SettingsDataStore.settings().factDistillEnabled) return@launch
+                val config = RuntimeConfigRepository.currentRuntimeConfig() ?: return@launch
+                val extractor = LlmAgentFactExtractor(config, ProviderClientFactory.getClient(config))
+                val facts = extractor.extractFacts(userText, result.content)
+                if (facts.isEmpty()) return@launch
+                val snapshot = AgentMemoryRepository.snapshot()
+                val merged = AgentFactRules.dedupeAndClamp(facts, snapshot.content)
+                if (merged.isEmpty()) return@launch
+                val content = "\n" + merged.joinToString("\n") { "- [沉淀] $it" }
+                when (
+                    AgentMemoryRepository.mutate(
+                        AgentMemoryMutation.Append(snapshot.revision, content)
+                    )
+                ) {
+                    is AgentMemoryWriteResult.Success -> Unit
+                    is AgentMemoryWriteResult.Conflict -> Unit
+                }
             }
         }
     }

@@ -22,12 +22,14 @@ import androidx.room.migration.Migration
         RuntimeInFlightEventEntity::class,
         SkillRegistryEntity::class,
         McpServerEntity::class,
+        ConversationSummaryEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = false,
 )
 internal abstract class FuckAndesDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
+    abstract fun conversationSummaryDao(): ConversationSummaryDao
     abstract fun providerDao(): ProviderDao
     abstract fun runtimeRunDao(): RuntimeRunDao
     abstract fun skillDao(): SkillDao
@@ -57,6 +59,7 @@ internal abstract class FuckAndesDatabase : RoomDatabase() {
                         MIGRATION_15_16,
                         MIGRATION_16_17,
                         MIGRATION_17_18,
+                        MIGRATION_18_19,
                     )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
@@ -101,6 +104,19 @@ internal abstract class FuckAndesDatabase : RoomDatabase() {
 
         internal val MIGRATION_17_18 = Migration(17, 18) { database ->
             database.execSQL("ALTER TABLE mcp_servers ADD COLUMN tools_expire_at INTEGER")
+        }
+
+        internal val MIGRATION_18_19 = Migration(18, 19) { database ->
+            database.execSQL(
+                "CREATE TABLE IF NOT EXISTS `conversation_summaries` (" +
+                    "`conversation_id` TEXT NOT NULL, " +
+                    "`summary` TEXT NOT NULL, " +
+                    "`summarized_turns` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`conversation_id`), " +
+                    "FOREIGN KEY(`conversation_id`) REFERENCES `conversations`(`id`) " +
+                    "ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
         }
 
         internal val MIGRATION_7_8 = Migration(7, 8) { database ->

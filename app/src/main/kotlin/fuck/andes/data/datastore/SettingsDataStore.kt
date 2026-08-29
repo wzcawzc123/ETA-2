@@ -28,6 +28,10 @@ internal object SettingsDataStore {
     private val SELECTED_PROVIDER_ID = stringPreferencesKey("selected_provider_id")
     private val SELECTED_MODEL_ID = stringPreferencesKey("selected_model_id")
     private val MEMORY_ENABLED = booleanPreferencesKey("memory_enabled")
+    private val CONVERSATION_SUMMARY_ENABLED =
+        booleanPreferencesKey("conversation_summary_enabled")
+    private val FACT_DISTILL_ENABLED = booleanPreferencesKey("fact_distill_enabled")
+    private val PROMPT_CACHE_ENABLED = booleanPreferencesKey("prompt_cache_enabled")
     private val APPEARANCE_THEME_MODE = stringPreferencesKey("appearance_theme_mode")
     private val APPEARANCE_MONET_ENABLED = booleanPreferencesKey("appearance_monet_enabled")
     private val APPEARANCE_PALETTE_STYLE = stringPreferencesKey("appearance_palette_style")
@@ -76,6 +80,9 @@ internal object SettingsDataStore {
             prefs.putOrRemove(SELECTED_PROVIDER_ID, updated.selectedProviderId)
             prefs.putOrRemove(SELECTED_MODEL_ID, updated.selectedModelId)
             prefs[MEMORY_ENABLED] = updated.memoryEnabled
+            prefs[CONVERSATION_SUMMARY_ENABLED] = updated.conversationSummaryEnabled
+            prefs[FACT_DISTILL_ENABLED] = updated.factDistillEnabled
+            prefs[PROMPT_CACHE_ENABLED] = updated.promptCacheEnabled
             prefs.putAppearance(updated.appearance.normalized())
         }
     }
@@ -142,6 +149,24 @@ internal object SettingsDataStore {
         updateSettings { it.copy(memoryEnabled = enabled) }
     }
 
+    suspend fun setConversationSummaryEnabled(enabled: Boolean) {
+        updateSettings { it.copy(conversationSummaryEnabled = enabled) }
+    }
+
+    suspend fun setFactDistillEnabled(enabled: Boolean) {
+        updateSettings { it.copy(factDistillEnabled = enabled) }
+    }
+
+    suspend fun setPromptCacheEnabled(enabled: Boolean) {
+        updateSettings { it.copy(promptCacheEnabled = enabled) }
+    }
+
+    fun conversationSummaryEnabledFlow(): Flow<Boolean> =
+        settingsFlow().map { it.conversationSummaryEnabled }
+
+    fun factDistillEnabledFlow(): Flow<Boolean> =
+        settingsFlow().map { it.factDistillEnabled }
+
     suspend fun setAppearanceSettings(settings: AppearanceSettings) {
         updateSettings { it.copy(appearance = settings.normalized()) }
     }
@@ -173,6 +198,9 @@ internal object SettingsDataStore {
         selectedProviderId = this[SELECTED_PROVIDER_ID],
         selectedModelId = this[SELECTED_MODEL_ID],
         memoryEnabled = this[MEMORY_ENABLED] ?: true,
+        conversationSummaryEnabled = this[CONVERSATION_SUMMARY_ENABLED] ?: true,
+        factDistillEnabled = this[FACT_DISTILL_ENABLED] ?: false,
+        promptCacheEnabled = this[PROMPT_CACHE_ENABLED] ?: false,
         appearance = AppearanceSettings(
             themeMode = AppearanceThemeMode.fromPersistedValue(this[APPEARANCE_THEME_MODE]),
             monetEnabled = this[APPEARANCE_MONET_ENABLED] ?: false,

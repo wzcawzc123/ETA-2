@@ -10,6 +10,7 @@ import fuck.andes.core.safeLogType
 import fuck.andes.data.datastore.SettingsDataStore
 import fuck.andes.data.repository.AgentMemoryRepository
 import fuck.andes.data.repository.AppearanceSettingsRepository
+import fuck.andes.data.repository.ConversationSummaryStore
 import fuck.andes.data.repository.McpServerRepository
 import fuck.andes.data.repository.ProviderRepository
 import fuck.andes.ui.app.PredictiveBackController
@@ -45,6 +46,7 @@ class FuckAndesApp : Application(), XposedServiceHelper.OnServiceListener {
             return
         }
         SettingsDataStore.init(this)
+        ConversationSummaryStore.init(this)
         val predictiveBackEnabled = runBlocking(Dispatchers.IO) {
             AppearanceSettingsRepository.settings().predictiveBackEnabled
         }

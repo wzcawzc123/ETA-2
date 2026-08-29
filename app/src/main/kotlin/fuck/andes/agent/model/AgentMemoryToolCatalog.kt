@@ -97,5 +97,26 @@ internal object AgentMemoryToolCatalog {
                         .put("required", JSONArray().put("mode").put("revision")),
                 ),
             )
+            .put(
+                AgentToolSchema.function(
+                    name = "memory_search",
+                    description = "Search local conversation summaries and MEMORY.md headings for earlier context (e.g. what was discussed or decided in a past conversation). Returns up to 8 matching snippets; summaries cover turns trimmed from the visible window of long conversations.",
+                    parameters = JSONObject()
+                        .put("type", "object")
+                        .put(
+                            "properties",
+                            JSONObject()
+                                .put(
+                                    "query",
+                                    JSONObject()
+                                        .put("type", "string")
+                                        .put("minLength", 1)
+                                        .put("maxLength", 120)
+                                        .put("description", "Keywords to search for in past conversation summaries and memory headings."),
+                                ),
+                        )
+                        .put("required", JSONArray().put("query")),
+                ),
+            )
     }
 }

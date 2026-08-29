@@ -9,6 +9,7 @@ import android.os.SystemClock
 import fuck.andes.agent.browser.AgentBrowserSession
 import fuck.andes.agent.device.RootShellDeviceController
 import fuck.andes.agent.device.BoundedRootCommandExecutor
+import fuck.andes.agent.model.AgentMemorySearch
 import fuck.andes.agent.model.AgentModelClient
 import fuck.andes.agent.model.AgentScreenObservationContract
 import fuck.andes.agent.model.AgentSensitiveToolPolicy
@@ -40,6 +41,7 @@ import fuck.andes.data.repository.AgentMemoryException
 import fuck.andes.data.repository.AgentMemoryMutation
 import fuck.andes.data.repository.AgentMemoryRepository
 import fuck.andes.data.repository.AgentMemoryWriteResult
+import fuck.andes.data.repository.ConversationSummaryStore
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -173,6 +175,7 @@ internal class AgentLocalTools(
                 "androguard_analyze" -> textResult(terminalTool { androguardAnalyze(args) })
                 "memory_get" -> textResult(memoryGet(args))
                 "memory_write" -> textResult(memoryWrite(args))
+                "memory_search" -> textResult(memorySearch(args))
                 "skills_list" -> textResult(skillsList(args))
                 "skills_read" -> textResult(skillsRead(args))
                 "skills_read_resource" -> textResult(skillsReadResource(args))
@@ -351,6 +354,39 @@ internal class AgentLocalTools(
         }
     } catch (failure: AgentMemoryException) {
         errorResult(failure.code, failure.message ?: "记忆写入失败")
+    }
+
+    private fun memorySearch(args: JSONObject): String {
+        val query = args.optString("query")
+        if (query.isBlank()) return errorResult("MISSING_QUERY", "缺少 query 参数")
+        val result = runBlocking {
+            runCatching {
+                val summaries = ConversationSummaryStore.all()
+                val headings = AgentMemoryRepository.snapshot().content
+                    .lineSequence()
+                    .map { it.trim() }
+                    .filter { it.startsWith("#") }
+                    .toList()
+                AgentMemorySearch.search(query, summaries, headings)
+            }.getOrElse { emptyList() }
+        }
+        if (result.isEmpty()) {
+            return errorResult("NO_MATCH", "没有找到匹配的早期记忆")
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("query", query)
+            .put("hits", JSONArray().apply {
+                result.forEach { hit ->
+                    put(
+                        JSONObject()
+                            .put("source", hit.source)
+                            .put("snippet", hit.snippet)
+                            .put("score", hit.score)
+                    )
+                }
+            })
+            .toString()
     }
 
     private fun browserUse(args: JSONObject, toolCallId: String): AgentModelClient.ToolResult {
@@ -1387,6 +1423,6 @@ internal class AgentLocalTools(
         val DEVICE_TOOL_NAMES =
             DEVICE_DIRECT_TOOL_NAMES + DEVICE_SENSITIVE_READ_TOOL_NAMES +
                 DEVICE_SENSITIVE_ACTION_TOOL_NAMES
-        val MEMORY_TOOL_NAMES = setOf("memory_get", "memory_write")
+        val MEMORY_TOOL_NAMES = setOf("memory_get", "memory_write", "memory_search")
     }
 }

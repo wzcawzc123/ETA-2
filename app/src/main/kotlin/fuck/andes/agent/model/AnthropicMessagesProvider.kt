@@ -14,6 +14,8 @@ import org.json.JSONObject
 internal object AnthropicMessagesProvider : AgentProviderClient {
     private const val MAX_ERROR_CHARS = 600
     private const val DEFAULT_MAX_TOKENS = 4096
+    private const val CACHE_BREAKPOINT_INTERVAL = 25
+    private val CACHEABLE_BLOCK_TYPES = setOf("text", "tool_result")
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     override val id: String = "anthropic_messages"
@@ -127,11 +129,60 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
             .put("messages", anthropicMessages)
             .also { request ->
                 val system = systemParts.joinToString("\n\n").trim()
-                if (system.isNotBlank()) request.put("system", system)
+                if (system.isNotBlank()) {
+                    request.put(
+                        "system",
+                        if (config.enablePromptCache) {
+                            JSONArray().put(
+                                JSONObject()
+                                    .put("type", "text")
+                                    .put("text", system)
+                                    .put("cache_control", JSONObject().put("type", "ephemeral"))
+                            )
+                        } else {
+                            system
+                        }
+                    )
+                }
+                if (config.enablePromptCache) {
+                    request.attachCacheBreakpoints(anthropicMessages)
+                }
                 convertTools(tools)?.let { request.put("tools", it) }
                 RequestBodyMerge.mergeCustomBody(request, config.customBody)
                 ProviderReasoning.applyAnthropicRequest(request, config)
             }
+    }
+
+    /** 每隔固定消息数在历史消息上打 cache_control 断点，跳过最后一条（当前用户消息）。 */
+    private fun JSONObject.attachCacheBreakpoints(messages: JSONArray) {
+        var count = 0
+        for (index in 0 until messages.length() - 1) {
+            val message = messages.optJSONObject(index) ?: continue
+            count += 1
+            if (count % CACHE_BREAKPOINT_INTERVAL == 0) {
+                message.attachCacheControlToLastBlock()
+            }
+        }
+    }
+
+    private fun JSONObject.attachCacheControlToLastBlock() {
+        when (val content = opt("content")) {
+            is JSONArray -> {
+                val last = content.optJSONObject(content.length() - 1) ?: return
+                if (last.optString("type") in CACHEABLE_BLOCK_TYPES) {
+                    last.put("cache_control", JSONObject().put("type", "ephemeral"))
+                }
+            }
+            is String -> put(
+                "content",
+                JSONArray().put(
+                    JSONObject()
+                        .put("type", "text")
+                        .put("text", content)
+                        .put("cache_control", JSONObject().put("type", "ephemeral"))
+                )
+            )
+        }
     }
 
     private fun convertUserContent(content: Any?): JSONArray =

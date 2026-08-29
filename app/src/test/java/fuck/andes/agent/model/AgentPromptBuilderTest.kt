@@ -190,6 +190,38 @@ class AgentPromptBuilderTest {
         assertTrue(messages.getJSONObject(messages.length() - 1).getString("content") == "当前问题")
     }
 
+    @Test
+    fun conversationSummaryInjectedAtStablePositionWhenProvided() {
+        val messages = AgentPromptBuilder.buildInitialMessages(
+            config = modelConfig("", terminalTools = false, browserTools = false),
+            prompt = "当前问题",
+            images = emptyList(),
+            history = listOf(
+                AgentModelClient.ConversationMessage(role = "user", content = "旧问题"),
+                AgentModelClient.ConversationMessage(role = "assistant", content = "旧回答"),
+            ),
+            skillContext = SkillContext.EMPTY,
+            conversationSummary = "早期讨论过支付流程",
+        )
+
+        val summaryMessage = messages.systemContents().single { it.contains("<conversation_summary>") }
+        assertTrue(summaryMessage.contains("早期讨论过支付流程"))
+        assertTrue(messages.getJSONObject(messages.length() - 1).getString("content") == "当前问题")
+    }
+
+    @Test
+    fun blankSummaryIsNotInjected() {
+        val messages = AgentPromptBuilder.buildInitialMessages(
+            config = modelConfig("", terminalTools = false, browserTools = false),
+            prompt = "当前问题",
+            images = emptyList(),
+            history = emptyList(),
+            skillContext = SkillContext.EMPTY,
+            conversationSummary = "   ",
+        )
+        assertFalse(messages.systemContents().any { it.contains("<conversation_summary>") })
+    }
+
     private fun modelConfig(
         systemPrompt: String,
         terminalTools: Boolean,

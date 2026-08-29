@@ -90,6 +90,7 @@ internal object AgentModelClient {
         runController: AgentRunController = AgentRunController(),
         skillContext: SkillContext = SkillContext.EMPTY,
         memoryContext: AgentMemoryContext = AgentMemoryContext.DISABLED,
+        conversationSummary: String? = null,
         additionalTools: JSONArray = JSONArray(),
         onEvent: (AgentEvent) -> Unit = {}
     ): ModelResponse.Text {
@@ -101,6 +102,7 @@ internal object AgentModelClient {
             history,
             skillContext,
             memoryContext,
+            conversationSummary,
         )
         if (!config.supportsVision) {
             AgentConversationCodec.stripImagesForTextOnlyModel(messages)
@@ -221,7 +223,9 @@ internal object AgentModelClient {
         val reasoningCapabilities: ModelReasoningCapabilities? = null,
         val extraBodyJson: String = "",
         val customHeaders: List<CustomHeader> = emptyList(),
-        val customBody: List<CustomBody> = emptyList()
+        val customBody: List<CustomBody> = emptyList(),
+        /** 是否向 Anthropic 系端点注入 cache_control 断点（需端点支持，默认关）。 */
+        val enablePromptCache: Boolean = false,
     ) {
         val effectiveReasoningEffort: ReasoningEffort
             get() = reasoningEffort ?: ReasoningEffort.fromLegacy(thinkingEnabled)

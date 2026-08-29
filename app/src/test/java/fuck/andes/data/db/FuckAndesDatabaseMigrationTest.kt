@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36])
 class FuckAndesDatabaseMigrationTest {
     @Test
-    fun migration6To18PreservesDataAndMovesBoundedConversationContext() {
+    fun migration6To19PreservesDataAndMovesBoundedConversationContext() {
         val context = RuntimeEnvironment.getApplication() as Context
         val databaseName = "migration-${UUID.randomUUID()}.db"
         createVersion6Database(context, databaseName)
@@ -51,6 +51,7 @@ class FuckAndesDatabaseMigrationTest {
                 FuckAndesDatabase.MIGRATION_15_16,
                 migration16To17WithMcpData,
                 FuckAndesDatabase.MIGRATION_17_18,
+                FuckAndesDatabase.MIGRATION_18_19,
             )
             .build()
         try {
@@ -120,6 +121,21 @@ class FuckAndesDatabaseMigrationTest {
                 listOf(ModelSource.CATALOG, ModelSource.MANUAL),
                 provider.models.map { it.source },
             )
+            // v18→v19：conversation_summaries 表可读写。
+            val summaryDao = database.conversationSummaryDao()
+            runBlocking(Dispatchers.IO) {
+                summaryDao.upsert(
+                    ConversationSummaryEntity(
+                        conversationId = "conv-1",
+                        summary = "滚动摘要",
+                        summarizedTurns = 12,
+                        updatedAt = 1L,
+                    )
+                )
+            }
+            val stored = runBlocking(Dispatchers.IO) { summaryDao.summary("conv-1") }
+            assertEquals("滚动摘要", stored?.summary)
+            assertEquals(12, stored?.summarizedTurns)
         } finally {
             database.close()
             context.deleteDatabase(databaseName)

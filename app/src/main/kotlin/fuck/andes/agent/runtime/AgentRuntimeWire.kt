@@ -77,6 +77,7 @@ internal object AgentRuntimeWire {
 
     private const val KEY_TYPE = "type"
     private const val KEY_RUN_ID = "run_id"
+    private const val KEY_CONVERSATION_SUMMARY = "conversation_summary"
     private const val KEY_PROMPT = "prompt"
     private const val KEY_PROVIDER_ID = "provider_id"
     private const val KEY_PROVIDER_NAME = "provider_name"
@@ -145,6 +146,7 @@ internal object AgentRuntimeWire {
         val config: AgentModelClient.ModelConfig,
         val images: List<AgentModelClient.ModelImage>,
         val history: List<AgentModelClient.ConversationMessage> = emptyList(),
+        val conversationSummary: String? = null,
         val handoff: EntryHandoff? = null
     )
 
@@ -241,6 +243,7 @@ internal object AgentRuntimeWire {
     private fun requestBundle(request: RunRequest, imageBundles: List<Bundle>): Bundle = Bundle().apply {
         putString(KEY_RUN_ID, request.runId)
         putString(KEY_PROMPT, request.prompt)
+        request.conversationSummary?.let { putString(KEY_CONVERSATION_SUMMARY, it) }
         putString(KEY_PROVIDER_ID, request.config.providerId)
         putString(KEY_PROVIDER_NAME, request.config.providerName)
         putString(KEY_PROVIDER_TYPE, request.config.providerType)
@@ -353,6 +356,7 @@ internal object AgentRuntimeWire {
     ): RunRequest = RunRequest(
             runId = bundle.getString(KEY_RUN_ID).orEmpty(),
             prompt = bundle.getString(KEY_PROMPT).orEmpty(),
+            conversationSummary = bundle.getString(KEY_CONVERSATION_SUMMARY),
             config = AgentModelClient.ModelConfig(
                 providerId = bundle.getString(KEY_PROVIDER_ID).orEmpty(),
                 providerName = bundle.getString(KEY_PROVIDER_NAME).orEmpty(),

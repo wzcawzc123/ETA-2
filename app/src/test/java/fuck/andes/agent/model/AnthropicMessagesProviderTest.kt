@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -148,6 +149,69 @@ class AnthropicMessagesProviderTest {
             assertEquals("adaptive", request.getJSONObject("thinking").getString("type"))
             assertEquals("medium", request.getJSONObject("output_config").getString("effort"))
         }
+    }
+
+    @Test
+    fun promptCacheInjectsCacheControlOnlyWhenEnabled() {
+        val body = buildString {
+            append(event("message_stop", JSONObject().put("type", "message_stop")))
+        }
+        val history = JSONArray().apply {
+            put(JSONObject().put("role", "system").put("content", "system"))
+            repeat(30) { index ->
+                put(
+                    JSONObject()
+                        .put("role", if (index % 2 == 0) "user" else "assistant")
+                        .put("content", "消息$index")
+                )
+            }
+        }
+
+        val enabledBody = AtomicReference<String>()
+        withAnthropicServer(body, onRequest = enabledBody::set) { baseUrl ->
+            AnthropicMessagesProvider.complete(
+                request = ProviderRequest(
+                    config = AgentModelClient.ModelConfig(
+                        providerType = ProviderTypes.ANTHROPIC,
+                        baseUrl = baseUrl,
+                        apiKey = "key",
+                        model = "claude-sonnet-5",
+                        systemPrompt = "system",
+                        enablePromptCache = true,
+                    ),
+                    messages = history,
+                    tools = JSONArray(),
+                ),
+                runController = AgentRunController(),
+            )
+        }
+        val enabled = JSONObject(enabledBody.get())
+        assertTrue(enabled.getJSONArray("system").getJSONObject(0).has("cache_control"))
+        // 30 条历史 → 每 25 条一个断点（跳过最后一条）→ 至少 1 处历史断点。
+        val serialized = enabledBody.get()
+        assertTrue(serialized.contains("\"cache_control\""))
+
+        val disabledBody = AtomicReference<String>()
+        withAnthropicServer(body, onRequest = disabledBody::set) { baseUrl ->
+            AnthropicMessagesProvider.complete(
+                request = ProviderRequest(
+                    config = AgentModelClient.ModelConfig(
+                        providerType = ProviderTypes.ANTHROPIC,
+                        baseUrl = baseUrl,
+                        apiKey = "key",
+                        model = "claude-sonnet-5",
+                        systemPrompt = "system",
+                        enablePromptCache = false,
+                    ),
+                    messages = history,
+                    tools = JSONArray(),
+                ),
+                runController = AgentRunController(),
+            )
+        }
+        val disabled = JSONObject(disabledBody.get())
+        assertFalse(disabled.has("cache_control"))
+        assertEquals("system", disabled.getString("system"))
     }
 
     private fun event(name: String, data: JSONObject): String =

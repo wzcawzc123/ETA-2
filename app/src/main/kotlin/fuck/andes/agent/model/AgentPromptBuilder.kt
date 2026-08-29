@@ -14,6 +14,7 @@ internal object AgentPromptBuilder {
         history: List<AgentModelClient.ConversationMessage>,
         skillContext: SkillContext,
         memoryContext: AgentMemoryContext = AgentMemoryContext.DISABLED,
+        conversationSummary: String? = null,
     ): JSONArray {
         val messages = JSONArray()
         if (config.systemPrompt.isNotBlank()) {
@@ -98,6 +99,7 @@ internal object AgentPromptBuilder {
         }
         buildMemorySystemMessage(memoryContext)?.let(messages::put)
         buildSkillSystemMessage(skillContext)?.let(messages::put)
+        buildConversationSummaryMessage(conversationSummary)?.let(messages::put)
         // 长对话按 contextWindow token 预算做滑动窗口裁剪（只影响注入副本，UI/持久化保持全量）。
         val windowedHistory = AgentHistoryWindow.trim(history, config.contextWindow)
         windowedHistory.forEach { item ->
@@ -105,6 +107,16 @@ internal object AgentPromptBuilder {
         }
         messages.put(AgentConversationCodec.userMessage(prompt, images))
         return messages
+    }
+
+    private fun buildConversationSummaryMessage(conversationSummary: String?): JSONObject? {
+        val summary = conversationSummary?.trim().orEmpty()
+        if (summary.isEmpty()) return null
+        return systemMessage(
+            "<conversation_summary>\n" +
+                "以下是本会话更早轮次的摘要（被裁剪历史的替代上下文）：\n$summary\n" +
+                "</conversation_summary>"
+        )
     }
 
     private fun buildMemorySystemMessage(context: AgentMemoryContext): JSONObject? {
