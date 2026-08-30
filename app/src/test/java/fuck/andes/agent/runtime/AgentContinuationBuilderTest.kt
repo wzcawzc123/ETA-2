@@ -1,5 +1,6 @@
 package fuck.andes.agent.runtime
 
+import fuck.andes.agent.model.AgentConversationCodec
 import fuck.andes.agent.model.AgentModelClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -56,7 +57,7 @@ class AgentContinuationBuilderTest {
             listOf("user", "user", "assistant", "tool", "assistant"),
             continuation.history.map { it.role },
         )
-        assertTrue(continuation.history[1].contentJson.contains("未写入持久会话"))
+        assertTrue(continuation.history[1].contentJson.contains(AgentConversationCodec.IMAGE_OMITTED_PREFIX))
         assertTrue(!continuation.history[1].contentJson.contains("base64"))
         assertEquals("call-1", continuation.history[3].toolCallId)
         assertEquals("run-next", continuation.handoff?.id)

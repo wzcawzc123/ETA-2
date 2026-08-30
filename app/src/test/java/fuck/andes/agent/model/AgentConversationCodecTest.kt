@@ -52,7 +52,47 @@ class AgentConversationCodecTest {
         )
 
         assertFalse(message.contentJson.contains("base64"))
-        assertTrue(message.contentJson.contains("未写入持久会话"))
+        assertTrue(message.contentJson.contains(AgentConversationCodec.IMAGE_OMITTED_PREFIX))
+    }
+
+    @Test
+    fun replaceImagePlaceholderReplacesOmittedText() {
+        val message = AgentConversationCodec.durableMessage(
+            AgentConversationCodec.userMessage(
+                text = "看看这张图",
+                images = listOf(
+                    AgentModelClient.ModelImage(
+                        reference = "data:image/png;base64,AAAA",
+                        mimeType = "image/png",
+                        bytes = 4,
+                    )
+                ),
+            )
+        )
+
+        assertTrue(message.contentJson.contains(AgentConversationCodec.IMAGE_OMITTED_PREFIX))
+        assertFalse(message.contentJson.contains("微信"))
+
+        val updated = AgentConversationCodec.replaceImagePlaceholder(
+            message,
+            "一张微信聊天截图，显示对方发送了三条消息",
+        )
+
+        assertFalse(updated.contentJson.contains(AgentConversationCodec.IMAGE_OMITTED_PREFIX))
+        assertTrue(updated.contentJson.contains("图片摘要"))
+        assertTrue(updated.contentJson.contains("微信"))
+        assertTrue(updated.contentJson.contains("三条消息"))
+    }
+
+    @Test
+    fun replaceImagePlaceholderReturnsSameIfNoPlaceholder() {
+        val message = AgentModelClient.ConversationMessage(
+            role = "user",
+            content = "纯文本消息",
+        )
+
+        val updated = AgentConversationCodec.replaceImagePlaceholder(message, "摘要")
+        assertTrue(updated === message)
     }
 
     @Test

@@ -19,6 +19,8 @@ import fuck.andes.agent.device.AgentFileReferenceGateway
 import fuck.andes.agent.device.DeviceLocationProvider
 import fuck.andes.agent.media.AgentImageCodec
 import fuck.andes.agent.memory.AgentMemoryContextBuilder
+import fuck.andes.agent.model.AgentConversationCodec
+import fuck.andes.agent.model.AgentImageSummarizer
 import fuck.andes.agent.model.AgentModelClient
 import fuck.andes.agent.model.AgentFileReference
 import fuck.andes.agent.model.AgentFileReferenceKind
@@ -1170,6 +1172,7 @@ internal class AgentAppState(
             }
             maybeRegenerateConversationSummary(conversationId, history, config)
             maybeDistillFacts(conversationId, prompt, result)
+            maybeSummarizeImages(conversationId, images, config)
         }
     }
 
@@ -1232,6 +1235,46 @@ internal class AgentAppState(
                 ) {
                     is AgentMemoryWriteResult.Success -> Unit
                     is AgentMemoryWriteResult.Conflict -> Unit
+                }
+            }
+        }
+    }
+
+    /**
+     * 图片文字摘要（默认开启）。run 结束后对本轮用户附图异步生成文字摘要，
+     * 替换持久化历史中的占位文字。后续轮次模型从摘要里回忆图片内容。
+     * 失败静默，不影响主流程。
+     */
+    private fun maybeSummarizeImages(
+        conversationId: String,
+        images: List<PendingImageUi>,
+        config: AgentModelClient.ModelConfig,
+    ) {
+        if (images.isEmpty()) return
+        scope.launch {
+            runCatching {
+                if (!SettingsDataStore.settings().imageSummaryEnabled) return@launch
+                val modelImages = images.toHistoryImages()
+                val imageUrls = AgentImageSummarizer.extractImageReferences(modelImages)
+                if (imageUrls.isEmpty()) return@launch
+                val userText = images.firstOrNull()?.let { "" } ?: ""
+                val summary = AgentImageSummarizer.summarize(config, imageUrls, userText)
+                if (summary.isNullOrBlank()) return@launch
+                withContext(Dispatchers.Main) {
+                    val current = homeState
+                    var changed = false
+                    val updatedHistory = current.history.map { msg ->
+                        val updated = AgentConversationCodec.replaceImagePlaceholder(msg, summary)
+                        if (updated !== msg) changed = true
+                        updated
+                    }
+                    if (changed) {
+                        updateConversation(
+                            conversationId,
+                            current.copy(history = updatedHistory),
+                        )
+                        persistConversations()
+                    }
                 }
             }
         }

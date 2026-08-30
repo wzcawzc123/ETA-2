@@ -13,5 +13,7 @@ data class Settings(
     val factDistillEnabled: Boolean = false,
     /** 向 Anthropic 系端点注入 cache_control 断点（需端点支持），默认关闭。 */
     val promptCacheEnabled: Boolean = false,
+    /** 图片文字摘要：用户附图持久化时转为 LLM 生成的文字摘要，替代直接剥离。 */
+    val imageSummaryEnabled: Boolean = true,
     val appearance: AppearanceSettings = AppearanceSettings(),
 )

@@ -945,6 +945,8 @@
   <string name="settings_memory_fact_distill_summary">每次运行后从对话提取稳定事实写入 MEMORY.md（消耗 token，默认关闭）</string>
   <string name="settings_memory_prompt_cache">提示词缓存断点</string>
   <string name="settings_memory_prompt_cache_summary">向 Anthropic 系端点注入缓存断点（需端点支持，默认关闭）</string>
+  <string name="settings_memory_image_summary">图片文字摘要</string>
+  <string name="settings_memory_image_summary_summary">每轮结束后将用户附图转为文字摘要；后续轮次通过摘要回忆图片，不再重发原图（默认开启）</string>
   <string name="settings_context_extensions">上下文与扩展</string>
   <string name="settings_llm_providers">LLM 提供商</string>
   <string name="skills_replace">替换</string>

@@ -17,7 +17,9 @@ internal object AgentConversationCodec {
     private const val MAX_REASONING_CHARS = 64_000
     private const val MAX_TOOL_ARGUMENT_CHARS = 32_000
     private const val MAX_TOOL_CALLS_PER_MESSAGE = 64
-    private const val IMAGE_OMITTED_TEXT = "[图片观察已在当前回合使用，未写入持久会话]"
+    internal const val IMAGE_OMITTED_PREFIX = "[图片摘要待生成]"
+    private const val IMAGE_OMITTED_TEXT =
+        "$IMAGE_OMITTED_PREFIX 图片内容将在对话结束后自动摘要。"
     private const val SENSITIVE_TOOL_OMITTED_TEXT =
         "[敏感工具参数与原始结果仅供当前回合使用，未写入持久会话]"
     private const val COMPACTION_NOTICE =
@@ -355,6 +357,22 @@ internal object AgentConversationCodec {
                 target.put("text", target.optString("text").take(MAX_CONTENT_CHARS / 2))
             }
         }
+
+    /**
+     * 将历史消息里的图片占位文字替换为 LLM 生成的文字摘要。
+     *
+     * 在异步摘要生成完成后调用：找到 contentJson 中的占位标记，
+     * 替换为 `[图片摘要] <摘要内容>`，使后续轮次模型能通过文字回忆图片。
+     */
+    fun replaceImagePlaceholder(
+        message: AgentModelClient.ConversationMessage,
+        summary: String,
+    ): AgentModelClient.ConversationMessage {
+        if (!message.contentJson.contains(IMAGE_OMITTED_PREFIX)) return message
+        val replaced = message.contentJson.replace(IMAGE_OMITTED_TEXT, "[图片摘要] $summary")
+        if (replaced == message.contentJson) return message
+        return message.copy(contentJson = replaced)
+    }
 
     private fun sanitizeToolCallsJson(raw: String): String {
         if (raw.isBlank()) return ""

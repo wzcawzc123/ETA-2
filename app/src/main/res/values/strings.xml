@@ -972,6 +972,8 @@
   <string name="settings_memory_fact_distill_summary">Extract stable facts from conversations into MEMORY.md after each run (costs tokens; off by default)</string>
   <string name="settings_memory_prompt_cache">Prompt cache breakpoints</string>
   <string name="settings_memory_prompt_cache_summary">Add cache_control breakpoints to Anthropic endpoints (requires provider support; off by default)</string>
+  <string name="settings_memory_image_summary">Image text summary</string>
+  <string name="settings_memory_image_summary_summary">Summarize user-sent images as text after each round; future rounds recall via summary instead of raw image</string>
   <string name="skills_replace">Replace</string>
   <string name="skills_delete_summary">After deleting “%1$s”, you will need to reinstall it to restore it.</string>
   <string name="skills_no_description">No description</string>

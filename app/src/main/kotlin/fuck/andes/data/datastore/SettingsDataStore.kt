@@ -32,6 +32,7 @@ internal object SettingsDataStore {
         booleanPreferencesKey("conversation_summary_enabled")
     private val FACT_DISTILL_ENABLED = booleanPreferencesKey("fact_distill_enabled")
     private val PROMPT_CACHE_ENABLED = booleanPreferencesKey("prompt_cache_enabled")
+    private val IMAGE_SUMMARY_ENABLED = booleanPreferencesKey("image_summary_enabled")
     private val APPEARANCE_THEME_MODE = stringPreferencesKey("appearance_theme_mode")
     private val APPEARANCE_MONET_ENABLED = booleanPreferencesKey("appearance_monet_enabled")
     private val APPEARANCE_PALETTE_STYLE = stringPreferencesKey("appearance_palette_style")
@@ -83,6 +84,7 @@ internal object SettingsDataStore {
             prefs[CONVERSATION_SUMMARY_ENABLED] = updated.conversationSummaryEnabled
             prefs[FACT_DISTILL_ENABLED] = updated.factDistillEnabled
             prefs[PROMPT_CACHE_ENABLED] = updated.promptCacheEnabled
+            prefs[IMAGE_SUMMARY_ENABLED] = updated.imageSummaryEnabled
             prefs.putAppearance(updated.appearance.normalized())
         }
     }
@@ -161,6 +163,10 @@ internal object SettingsDataStore {
         updateSettings { it.copy(promptCacheEnabled = enabled) }
     }
 
+    suspend fun setImageSummaryEnabled(enabled: Boolean) {
+        updateSettings { it.copy(imageSummaryEnabled = enabled) }
+    }
+
     fun conversationSummaryEnabledFlow(): Flow<Boolean> =
         settingsFlow().map { it.conversationSummaryEnabled }
 
@@ -169,6 +175,9 @@ internal object SettingsDataStore {
 
     fun promptCacheEnabledFlow(): Flow<Boolean> =
         settingsFlow().map { it.promptCacheEnabled }
+
+    fun imageSummaryEnabledFlow(): Flow<Boolean> =
+        settingsFlow().map { it.imageSummaryEnabled }
 
     suspend fun setAppearanceSettings(settings: AppearanceSettings) {
         updateSettings { it.copy(appearance = settings.normalized()) }
@@ -204,6 +213,7 @@ internal object SettingsDataStore {
         conversationSummaryEnabled = this[CONVERSATION_SUMMARY_ENABLED] ?: true,
         factDistillEnabled = this[FACT_DISTILL_ENABLED] ?: false,
         promptCacheEnabled = this[PROMPT_CACHE_ENABLED] ?: false,
+        imageSummaryEnabled = this[IMAGE_SUMMARY_ENABLED] ?: true,
         appearance = AppearanceSettings(
             themeMode = AppearanceThemeMode.fromPersistedValue(this[APPEARANCE_THEME_MODE]),
             monetEnabled = this[APPEARANCE_MONET_ENABLED] ?: false,

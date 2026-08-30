@@ -77,6 +77,7 @@ private val ColorOSRed = Color(0xFFEB3B2F)
 private val ColorOSPurple = Color(0xFF0066FF)
 private val ColorOSSlateGray = Color(0xFF0066FF)
 private val ColorOSOrange = Color(0xFFFF7700)
+private val ColorOSTeal = Color(0xFF00B5B5)
 
 /**
  * 模块配置界面。
@@ -257,6 +258,16 @@ internal fun SettingsScreen(
                         iconTint = ColorOSRoyalBlue,
                         checkedFlow = SettingsDataStore::promptCacheEnabledFlow,
                         onToggle = SettingsDataStore::setPromptCacheEnabled,
+                    )
+                    PrefDivider()
+                    DataStoreSwitchPref(
+                        context = context,
+                        title = stringResource(R.string.settings_memory_image_summary),
+                        summary = stringResource(R.string.settings_memory_image_summary_summary),
+                        icon = LucideR.drawable.lucide_ic_image,
+                        iconTint = ColorOSTeal,
+                        checkedFlow = SettingsDataStore::imageSummaryEnabledFlow,
+                        onToggle = SettingsDataStore::setImageSummaryEnabled,
                     )
                 }
             }
