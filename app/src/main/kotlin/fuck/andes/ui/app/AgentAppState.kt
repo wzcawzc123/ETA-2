@@ -1175,7 +1175,7 @@ internal class AgentAppState(
             }
             maybeRegenerateConversationSummary(conversationId, history, config)
             maybeDistillFacts(conversationId, prompt, result)
-            maybeSummarizeImages(conversationId, images, config)
+            maybeSummarizeImages(conversationId, images, config, prompt)
         }
     }
 
@@ -1252,6 +1252,7 @@ internal class AgentAppState(
         conversationId: String,
         images: List<PendingImageUi>,
         config: AgentModelClient.ModelConfig,
+        prompt: String,
     ) {
         if (images.isEmpty()) return
         scope.launch {
@@ -1260,7 +1261,7 @@ internal class AgentAppState(
                 val modelImages = images.toHistoryImages()
                 val imageUrls = AgentImageSummarizer.extractImageReferences(modelImages)
                 if (imageUrls.isEmpty()) return@launch
-                val userText = images.firstOrNull()?.let { "" } ?: ""
+                val userText = prompt.take(200)
                 val summary = AgentImageSummarizer.summarize(config, imageUrls, userText)
                 if (summary.isNullOrBlank()) return@launch
                 withContext(Dispatchers.Main) {

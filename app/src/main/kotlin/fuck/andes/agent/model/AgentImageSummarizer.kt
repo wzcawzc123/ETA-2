@@ -18,16 +18,25 @@ import org.json.JSONObject
  */
 internal object AgentImageSummarizer {
 
-    private const val MAX_SUMMARY_CHARS = 300
+    /** 单张图片的基础摘要上限。多张时按图片数量线性增长，封顶 3 倍。 */
+    private const val BASE_SUMMARY_CHARS = 300
+    private const val MAX_MULTIPLIER = 3
 
-    private val SYSTEM_PROMPT = JSONObject()
-        .put("role", "system")
-        .put(
-            "content",
+    private fun maxSummaryChars(imageCount: Int): Int =
+        BASE_SUMMARY_CHARS * imageCount.coerceIn(1, MAX_MULTIPLIER)
+
+    private fun buildSystemPrompt(imageCount: Int): JSONObject {
+        val instruction = if (imageCount <= 1) {
             "你是一个图片内容摘要助手。用中文简要描述用户发送的图片关键内容（200字以内），" +
                 "保留文字、布局、关键视觉信息、人物/对象描述，不要添加分析或建议。" +
-                "只输出摘要本身，不要加前缀或标题。",
-        )
+                "只输出摘要本身，不要加前缀或标题。"
+        } else {
+            "你是一个图片内容摘要助手。用户发送了 $imageCount 张图片，" +
+                "请按图片顺序逐张简要描述（每张50-100字），用\"[图1]\"\"[图2]\"前缀标注。" +
+                "每张保留文字、布局、关键视觉信息，不要添加分析或建议。"
+        }
+        return JSONObject().put("role", "system").put("content", instruction)
+    }
 
     /**
      * 从持久化前的用户消息 contentJson 中提取 image_url 的 reference。
@@ -76,7 +85,7 @@ internal object AgentImageSummarizer {
             }
 
             val messages = JSONArray()
-                .put(SYSTEM_PROMPT)
+                .put(buildSystemPrompt(imageUrls.size))
                 .put(JSONObject().put("role", "user").put("content", userContent))
 
             val request = ProviderRequest(
@@ -95,7 +104,7 @@ internal object AgentImageSummarizer {
                 }
             }
 
-            text.toString().trim().take(MAX_SUMMARY_CHARS).ifBlank { null }
+            text.toString().trim().take(maxSummaryChars(imageUrls.size)).ifBlank { null }
         }.getOrElse { throwable ->
             null
         }

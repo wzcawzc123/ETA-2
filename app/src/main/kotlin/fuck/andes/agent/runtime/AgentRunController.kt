@@ -2,11 +2,17 @@ package fuck.andes.agent.runtime
 
 import java.util.ArrayDeque
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 internal class AgentRunController {
+    companion object {
+        /** pause 后的安全超时（5 分钟），避免线程永久阻塞。 */
+        private const val PAUSE_SAFETY_TIMEOUT_MS = 5 * 60 * 1000L
+    }
+
     private val resources = CopyOnWriteArraySet<CancellableResource>()
 
     @Volatile
@@ -92,7 +98,11 @@ internal class AgentRunController {
         lock.withLock {
             while (paused && !cancelled) {
                 try {
-                    pauseCondition.await()
+                    // 安全超时：pause 后 5 分钟未 resume 则自动 cancel，避免线程永久阻塞。
+                    // 正常流程中 pause/resume 成对出现，此超时仅在 overlay 异常等极端场景触发。
+                    if (!pauseCondition.await(PAUSE_SAFETY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                        cancelled = true
+                    }
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
                     cancelled = true
