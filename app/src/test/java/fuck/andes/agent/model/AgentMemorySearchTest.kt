@@ -42,7 +42,7 @@ class AgentMemorySearchTest {
     fun searchIsCaseInsensitive() {
         val summaries = listOf("c1" to "Payment gateway discussion")
         assertTrue(AgentMemorySearch.search("payment", summaries, emptyList()).isNotEmpty())
-
+    }
 
     @Test
     fun queryTermsAddsNgramsForChineseLongTokens() {
@@ -50,6 +50,5 @@ class AgentMemorySearchTest {
         assertTrue(terms.contains("用户偏好在广州"))
         assertTrue(terms.contains("用户"))
         assertTrue(terms.contains("广州"))
-    }
     }
 }
