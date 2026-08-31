@@ -29,17 +29,20 @@ internal sealed interface AndroguardInstallResult {
 }
 
 /**
- * 在 Alpine 基础环境通过 uv tool 隔离安装 Androguard（Python 逆向/签名工具），
+ * 在当前选择的基础环境（Alpine/Debian）通过 uv tool 隔离安装 Androguard（Python 逆向/签名工具），
  * 并把入口软链到 /usr/local/bin（默认 PATH，Agent 无需改环境即可调用）。
  * 版本固定、可卸载、失败可回滚。
  */
-internal class AlpineAndroguardInstaller(
+internal class LinuxAndroguardInstaller(
     private val context: Context,
+    private val distribution: LinuxDistribution,
 ) {
+    private val rootfs: File get() = LinuxEnvironmentPaths.rootfsDir(context, distribution)
+    private val environment: TerminalEnvironment get() = distribution.terminalEnvironment
     private val installMutex = Mutex()
 
     fun isReady(): Boolean =
-        AlpineEnvironmentPaths.androguardReady(AlpineEnvironmentPaths.rootfsDir(context).absolutePath)
+        AlpineEnvironmentPaths.androguardReady(rootfs.absolutePath)
 
     suspend fun install(
         onProgress: suspend (AndroguardInstallProgress) -> Unit = {},
@@ -56,7 +59,6 @@ internal class AlpineAndroguardInstaller(
         onProgress: suspend (AndroguardInstallProgress) -> Unit,
     ): AndroguardInstallResult = withContext(Dispatchers.IO) {
         if (isReady()) return@withContext AndroguardInstallResult.AlreadyReady
-        val rootfs = AlpineEnvironmentPaths.rootfsDir(context)
         onProgress(AndroguardInstallProgress(AndroguardInstallStage.CHECKING))
         if (!AlpineEnvironmentPaths.commonToolsReady(rootfs.absolutePath)) {
             return@withContext AndroguardInstallResult.EnvironmentNotReady
@@ -91,7 +93,7 @@ internal class AlpineAndroguardInstaller(
         val result = InstallerShellRunner.run(
             command = ANDROGUARD_INSTALL_SCRIPT,
             timeoutSeconds = ANDROGUARD_INSTALL_TIMEOUT_SECONDS,
-            environment = TerminalEnvironment.ALPINE,
+            environment = environment,
             linuxRootfsPath = rootfs.absolutePath,
         )
         AndroidAgentLogger.info(
@@ -118,7 +120,7 @@ internal class AlpineAndroguardInstaller(
         val result = InstallerShellRunner.run(
             command = command,
             timeoutSeconds = 90,
-            environment = TerminalEnvironment.ALPINE,
+            environment = environment,
             linuxRootfsPath = rootfs.absolutePath,
         )
         AndroidAgentLogger.info(
@@ -133,7 +135,7 @@ internal class AlpineAndroguardInstaller(
         InstallerShellRunner.run(
             command = "rm -f /${AlpineEnvironmentPaths.ANDROGUARD_MARKER} 2>/dev/null || true",
             timeoutSeconds = 60,
-            environment = TerminalEnvironment.ALPINE,
+            environment = environment,
             linuxRootfsPath = rootfs.absolutePath,
         )
     }

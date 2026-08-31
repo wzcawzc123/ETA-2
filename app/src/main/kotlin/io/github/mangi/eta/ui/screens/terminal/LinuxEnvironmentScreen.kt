@@ -49,7 +49,7 @@ import io.github.mangi.eta.agent.terminal.LinuxDistribution
 import io.github.mangi.eta.agent.terminal.LinuxEnvironmentPaths
 import io.github.mangi.eta.agent.terminal.SharedFolderMounts
 import io.github.mangi.eta.agent.terminal.terminalEnvironment
-import io.github.mangi.eta.agent.terminal.AlpineAndroguardInstaller
+import io.github.mangi.eta.agent.terminal.LinuxAndroguardInstaller
 import io.github.mangi.eta.agent.terminal.AndroguardInstallProgress
 import io.github.mangi.eta.agent.terminal.AndroguardInstallResult
 import io.github.mangi.eta.agent.terminal.AndroguardInstallStage
@@ -172,10 +172,10 @@ internal fun LinuxEnvironmentScreen(
         mutableStateOf(apkAnalysisInstaller.isReady())
     }
     var apkAnalysisProgress by remember { mutableStateOf<ApkAnalysisInstallProgress?>(null) }
-    val androguardInstaller = remember(appContext) {
-        AlpineAndroguardInstaller(appContext)
+    val androguardInstaller = remember(appContext, selectedDistribution) {
+        LinuxAndroguardInstaller(appContext, selectedDistribution)
     }
-    var androguardReady by remember { mutableStateOf(androguardInstaller.isReady()) }
+    var androguardReady by remember(selectedDistribution) { mutableStateOf(androguardInstaller.isReady()) }
     var androguardProgress by remember { mutableStateOf<AndroguardInstallProgress?>(null) }
     var kimiWebLaunching by remember { mutableStateOf(false) }
     val kimiWebLauncher = remember(appContext) {
