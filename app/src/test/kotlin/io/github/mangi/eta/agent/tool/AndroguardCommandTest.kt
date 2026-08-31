@@ -39,7 +39,7 @@ class AndroguardCommandTest {
     @Test
     fun dexScanBuildsVenvPythonScriptWithLimit() {
         val cmd = AndroguardCommand.buildDexScan("/sdcard/app.apk", 25)
-        assertTrue(cmd.startsWith("/root/.local/share/pipx/venvs/androguard/bin/python -c '"))
+        assertTrue(cmd.startsWith("/opt/eta/uv-tools/androguard/bin/python -c '"))
         assertTrue(cmd.contains("androguard.core.dex"))
         assertTrue(cmd.contains("'/sdcard/app.apk' 25"))
     }
