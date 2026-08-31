@@ -91,7 +91,7 @@ internal class AlpineAndroguardInstaller(
         val result = InstallerShellRunner.run(
             command = ANDROGUARD_INSTALL_SCRIPT,
             timeoutSeconds = ANDROGUARD_INSTALL_TIMEOUT_SECONDS,
-            environment = TerminalEnvironment.LINUX,
+            environment = TerminalEnvironment.ALPINE,
             linuxRootfsPath = rootfs.absolutePath,
         )
         AndroidAgentLogger.info(
@@ -118,7 +118,7 @@ internal class AlpineAndroguardInstaller(
         val result = InstallerShellRunner.run(
             command = command,
             timeoutSeconds = 90,
-            environment = TerminalEnvironment.LINUX,
+            environment = TerminalEnvironment.ALPINE,
             linuxRootfsPath = rootfs.absolutePath,
         )
         AndroidAgentLogger.info(
@@ -133,7 +133,7 @@ internal class AlpineAndroguardInstaller(
         InstallerShellRunner.run(
             command = "rm -f /${AlpineEnvironmentPaths.ANDROGUARD_MARKER} 2>/dev/null || true",
             timeoutSeconds = 60,
-            environment = TerminalEnvironment.LINUX,
+            environment = TerminalEnvironment.ALPINE,
             linuxRootfsPath = rootfs.absolutePath,
         )
     }

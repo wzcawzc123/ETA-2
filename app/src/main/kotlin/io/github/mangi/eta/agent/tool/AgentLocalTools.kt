@@ -308,7 +308,7 @@ internal class AgentLocalTools(
             InstallerShellRunner.run(
                 command = command,
                 timeoutSeconds = 300L,
-                environment = TerminalEnvironment.LINUX,
+                environment = TerminalEnvironment.ALPINE,
                 linuxRootfsPath = rootfsPath,
             )
         }

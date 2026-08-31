@@ -166,10 +166,13 @@ internal object SettingsDataStore {
     }
     suspend fun setFactDistillEnabled(enabled: Boolean) {
         updateSettings { it.copy(factDistillEnabled = enabled) }
+    }
     suspend fun setPromptCacheEnabled(enabled: Boolean) {
         updateSettings { it.copy(promptCacheEnabled = enabled) }
+    }
     suspend fun setImageSummaryEnabled(enabled: Boolean) {
         updateSettings { it.copy(imageSummaryEnabled = enabled) }
+    }
     fun conversationSummaryEnabledFlow(): Flow<Boolean> =
         settingsFlow().map { it.conversationSummaryEnabled }
     fun factDistillEnabledFlow(): Flow<Boolean> =
@@ -181,6 +184,7 @@ internal object SettingsDataStore {
     suspend fun setLinuxDistribution(value: String?) {
         ensureInitialized()
         dataStore.edit { preferences -> preferences.putOrRemove(LINUX_DISTRIBUTION, value) }
+    }
     suspend fun setAppearanceSettings(settings: AppearanceSettings) {
         updateSettings { it.copy(appearance = settings.normalized()) }
     }
