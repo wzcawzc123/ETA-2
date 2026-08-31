@@ -332,7 +332,7 @@ internal object AgentConversationStore {
             }
         }.getOrDefault(emptyList())
 
-    private fun List<ConversationMessageEntity>.toLegacyHistory(): List<AgentModelClient.ConversationMessage> =
+    internal fun List<ConversationMessageEntity>.toLegacyHistory(): List<AgentModelClient.ConversationMessage> =
         mapNotNull { message ->
             when (message.type) {
                 TYPE_USER -> AgentModelClient.ConversationMessage(
@@ -357,6 +357,6 @@ internal object AgentConversationStore {
     private const val TYPE_THINKING = "thinking"
     private const val TYPE_TOOL = "tool"
     private const val TYPE_TOOL_SUMMARY = "tool_summary"
-    private const val MESSAGE_LOAD_PAGE_SIZE = 128
+    internal const val MESSAGE_LOAD_PAGE_SIZE = 128
     private const val LEGACY_UNNAMED_TITLE = "新对话"
 }

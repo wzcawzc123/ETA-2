@@ -68,5 +68,21 @@ class AgentHistorySummaryTest {
         assertEquals("abc", AgentHistorySummary.clampSummary("  abc  "))
         assertEquals("a".repeat(100), AgentHistorySummary.clampSummary("a".repeat(500), maxChars = 100))
         assertEquals("", AgentHistorySummary.clampSummary("  "))
+
+
+    @Test
+    fun incrementalTurnsSinceSlicesAfterExistingTurns() {
+        val turns = listOf(
+            msg("user", "u1"), msg("assistant", "a1"),
+            msg("user", "u2"), msg("assistant", "a2"),
+            msg("user", "u3"), msg("assistant", "a3"),
+        )
+        assertEquals(
+            listOf("u3", "a3"),
+            AgentHistorySummary.incrementalTurnsSince(turns, existingUserTurns = 2).map { it.content },
+        )
+        assertEquals(emptyList<AgentModelClient.ConversationMessage>(), AgentHistorySummary.incrementalTurnsSince(turns, existingUserTurns = 10))
+        assertEquals(turns, AgentHistorySummary.incrementalTurnsSince(turns, existingUserTurns = 0))
+    }
     }
 }

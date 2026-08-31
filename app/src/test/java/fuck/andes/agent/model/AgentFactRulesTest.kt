@@ -43,5 +43,19 @@ class AgentFactRulesTest {
             maxFacts = 1,
         )
         assertEquals(AgentFactRules.MAX_FACT_CHARS, merged.single().length)
+
+
+    @Test
+    fun parseFactsFiltersNegativeConclusions() {
+        val raw = "- 用户偏好中文\n- 暂无长期稳定事实。\n- 无可用事实"
+        assertEquals(listOf("用户偏好中文"), AgentFactRules.parseFacts(raw))
+    }
+
+    @Test
+    fun dedupeAndClampDropsSemanticDuplicates() {
+        val facts = listOf("用户正在开发一个项目", "用户正在开发一个游戏项目")
+        val merged = AgentFactRules.dedupeAndClamp(facts, existingMemory = "")
+        assertEquals(1, merged.size)
+    }
     }
 }

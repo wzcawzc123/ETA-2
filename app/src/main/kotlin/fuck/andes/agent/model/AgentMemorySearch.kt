@@ -17,13 +17,28 @@ internal object AgentMemorySearch {
         val score: Int,
     )
 
-    /** 查询词拆分：按空白/标点切分，忽略 1 字符词。 */
-    fun queryTerms(query: String): List<String> =
-        query.trim()
+    /** 中文长词补字符 n-gram，降低整句成词导致的召回为 0。 */
+    private fun cjkNgrams(token: String): List<String> {
+        if (token.length < 3) return emptyList()
+        val chars = token.toCharArray()
+        val grams = mutableListOf<String>()
+        for (i in 0 until chars.size - 1) grams += chars[i].toString() + chars[i + 1]
+        for (i in 0 until chars.size - 2) grams += chars[i].toString() + chars[i + 1] + chars[i + 2]
+        return grams
+    }
+
+    /** 查询词拆分：按空白/标点切分，忽略 1 字符词；对中文长词补充字符 n-gram 提升召回。 */
+    fun queryTerms(query: String): List<String> {
+        val tokens = query.trim()
             .take(MAX_QUERY_CHARS)
             .split(Regex("[\\s，。！？；：、,.!?;:]+"))
             .map { it.trim() }
             .filter { it.length >= 2 }
+        return buildList {
+            addAll(tokens)
+            addAll(tokens.flatMap(::cjkNgrams))
+        }.distinct()
+    }
 
     /** 在候选文本上打分：命中词数 × 词长。 */
     fun scoreText(text: String, terms: List<String>): Int {

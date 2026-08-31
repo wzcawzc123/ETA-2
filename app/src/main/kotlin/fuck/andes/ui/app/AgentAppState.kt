@@ -47,6 +47,8 @@ import fuck.andes.core.safeLogType
 import fuck.andes.data.model.Model
 import fuck.andes.data.model.ModelReasoningCapabilities
 import fuck.andes.data.model.ReasoningEffort
+import fuck.andes.data.db.FuckAndesDatabase
+import fuck.andes.data.db.ConversationMessageEntity
 import fuck.andes.data.datastore.SettingsDataStore
 import fuck.andes.data.repository.ModelRepository
 import fuck.andes.data.repository.AgentMemoryRepository
@@ -1191,21 +1193,50 @@ internal class AgentAppState(
         scope.launch {
             runCatching {
                 if (!SettingsDataStore.settings().conversationSummaryEnabled) return@launch
-                val windowed = AgentHistoryWindow.trim(history, config.contextWindow)
-                if (windowed.size >= history.size) return@launch
-                val trimmedTurns = history.take(history.size - windowed.size)
-                val trimmedUsers = AgentHistorySummary.trimmedUserTurnCount(history, windowed)
-                if (!AgentHistorySummary.needsRegeneration(trimmedUsers)) return@launch
+                // 用数据库全量历史判定裁剪：UI checkpoint 只含最近几十条，会导致永不触发摘要。
+                val fullHistory = loadFullConversationHistory(conversationId).ifEmpty { history }
+                if (fullHistory.size < 2) return@launch
+                val windowed = AgentHistoryWindow.trim(fullHistory, config.contextWindow)
+                if (windowed.size >= fullHistory.size) return@launch
+                val trimmedTurns = fullHistory.take(fullHistory.size - windowed.size)
+                val trimmedUsers = AgentHistorySummary.trimmedUserTurnCount(fullHistory, windowed)
                 val existing = ConversationSummaryStore.summaryEntry(conversationId)
                 val existingTurns = existing?.summarizedTurns ?: 0
                 val existingSummary = existing?.summary
+                val newSinceLast = trimmedUsers - existingTurns
+                if (!AgentHistorySummary.needsRegeneration(newSinceLast)) return@launch
+                // 增量：只把上次已总结之后新被裁的轮次交给模型（修 P1-2 重复总结）。
+                val incremental = AgentHistorySummary.incrementalTurnsSince(trimmedTurns, existingTurns)
+                if (incremental.isEmpty()) return@launch
                 val summarizer = LlmConversationSummarizer(config, ProviderClientFactory.getClient(config))
-                val newSummary = summarizer.summarize(existingSummary, trimmedTurns)
-                ConversationSummaryStore.upsert(
-                    conversationId,
-                    newSummary,
-                    existingTurns + trimmedUsers,
+                val newSummary = summarizer.summarize(existingSummary, incremental)
+                ConversationSummaryStore.upsert(conversationId, newSummary, trimmedUsers)
+            }
+        }
+    }
+
+    /** 从数据库读取某会话的完整历史（user/assistant），供摘要裁剪判定使用。 */
+    private suspend fun loadFullConversationHistory(
+        conversationId: String,
+    ): List<AgentModelClient.ConversationMessage> {
+        val dao = FuckAndesDatabase.get(appContext).conversationDao()
+        val all = mutableListOf<ConversationMessageEntity>()
+        var offset = 0
+        while (true) {
+            val page = dao.messagesPage(conversationId, AgentConversationStore.MESSAGE_LOAD_PAGE_SIZE, offset)
+            all += page
+            if (page.size < AgentConversationStore.MESSAGE_LOAD_PAGE_SIZE) break
+            offset += page.size
+        }
+        return all.mapNotNull { entity ->
+            when (entity.type) {
+                "user" -> AgentModelClient.ConversationMessage(
+                    role = "user",
+                    content = entity.content,
                 )
+                "assistant" -> entity.content.takeIf { it.isNotBlank() }
+                    ?.let { AgentModelClient.ConversationMessage(role = "assistant", content = it) }
+                else -> null
             }
         }
     }

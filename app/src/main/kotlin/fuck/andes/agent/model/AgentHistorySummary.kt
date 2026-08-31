@@ -36,6 +36,29 @@ internal object AgentHistorySummary {
         return fullHistory.take(fullIndexOfFirstUser).count { it.role == "user" }
     }
 
+    /**
+     * 从被裁剪的历史中切出"上次已总结 existingUserTurns 个用户轮之后"的增量部分。
+     * 用于增量摘要（P1-2）：只把新增的被裁轮次交给模型，避免重复总结旧内容。
+     * existingUserTurns <= 0 时返回全部（首次生成）。
+     */
+    fun incrementalTurnsSince(
+        trimmedTurns: List<AgentModelClient.ConversationMessage>,
+        existingUserTurns: Int,
+    ): List<AgentModelClient.ConversationMessage> {
+        if (existingUserTurns <= 0 || trimmedTurns.isEmpty()) return trimmedTurns
+        var seen = 0
+        val start = trimmedTurns.indexOfFirst { msg ->
+            if (msg.role == "user") {
+                seen += 1
+                seen == existingUserTurns + 1
+            } else {
+                false
+            }
+        }
+        if (start < 0) return emptyList()
+        return trimmedTurns.subList(start, trimmedTurns.size).toList()
+    }
+
     /** 把早期轮次格式化为模型可读文本（有界）。 */
     fun serializeTurns(
         turns: List<AgentModelClient.ConversationMessage>,
