@@ -62,5 +62,5 @@ internal object AlpineEnvironmentPaths {
 
     /** Androguard venv python（chroot 内路径）。 */
     fun androguardPythonPath(): String =
-        "/root/.local/share/pipx/venvs/androguard/bin/python"
+        "/opt/eta/uv-tools/androguard/bin/python"
 }

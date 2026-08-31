@@ -11,7 +11,7 @@ internal object AndroguardCommand {
     const val DEFAULT_OPERATION = "axml"
     const val DEX_SCAN_OPERATION = "dex_strings"
     private val ALLOWED_OPERATIONS = setOf("axml", "apkid", "sign")
-    private const val ANDROGUARD_PYTHON = "/root/.local/share/pipx/venvs/androguard/bin/python"
+    private const val ANDROGUARD_PYTHON = "/opt/eta/uv-tools/androguard/bin/python"
 
     fun build(operation: String, apkPath: String, extraArgs: String): String {
         val op = normalizeOperation(operation)

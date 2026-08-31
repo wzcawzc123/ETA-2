@@ -29,7 +29,7 @@ internal sealed interface AndroguardInstallResult {
 }
 
 /**
- * 在 Alpine 基础环境通过 pipx 隔离安装 Androguard（Python 逆向/签名工具），
+ * 在 Alpine 基础环境通过 uv tool 隔离安装 Androguard（Python 逆向/签名工具），
  * 并把入口软链到 /usr/local/bin（默认 PATH，Agent 无需改环境即可调用）。
  * 版本固定、可卸载、失败可回滚。
  */
@@ -145,9 +145,9 @@ internal class AlpineAndroguardInstaller(
         private val ANDROGUARD_INSTALL_SCRIPT = """
             set -e
             export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${'$'}HOME/.local/bin"
-            pipx install androguard==$ANDROGUARD_EXPECTED_VERSION || exit 80
+            uv tool install androguard==$ANDROGUARD_EXPECTED_VERSION || exit 80
             mkdir -p /usr/local/bin
-            ln -sf "${'$'}HOME/.local/share/pipx/venvs/androguard/bin/androguard" /usr/local/bin/androguard || exit 84
+            ln -sf "${'$'}(uv tool dir)/androguard/bin/androguard" /usr/local/bin/androguard || exit 84
             command -v androguard >/dev/null 2>&1 || exit 81
         """.trimIndent()
     }
