@@ -20,6 +20,7 @@ import io.github.mangi.eta.ui.components.chatConversationCompositionKey
 import io.github.mangi.eta.ui.model.AgentChatAction
 import io.github.mangi.eta.ui.model.AgentChatMessageUi
 import io.github.mangi.eta.ui.model.AgentChatUiState
+import io.github.mangi.eta.ui.model.AgentMessageUi
 import io.github.mangi.eta.ui.model.AgentModelPickerUiState
 import io.github.mangi.eta.ui.model.TokenUsageUi
 import kotlin.math.roundToInt
@@ -77,10 +78,10 @@ internal fun AgentChatScreen(
     }
 }
 
-/** 取最近一条非空 usage（当前 run 的缓存命中来源）。 */
+/** 取最近一条非空 usage（当前 run 的缓存命中来源）。只有 AgentMessageUi 才有 usage 字段。 */
 private fun latestUsage(messages: List<AgentChatMessageUi>): TokenUsageUi? =
     messages.asReversed().firstNotNullOfOrNull { message ->
-        message.usage?.takeIf { usage -> !usage.isEmpty }
+        (message as? AgentMessageUi)?.usage?.takeIf { usage -> !usage.isEmpty }
     }
 
 /** 聊天页顶部居中的缓存命中率指示。无 usage 时不占位。 */
