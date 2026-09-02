@@ -12,6 +12,7 @@ import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.AppearanceSettingsRepository
 import io.github.mangi.eta.data.repository.ConversationSummaryStore
 import io.github.mangi.eta.data.repository.McpServerRepository
+import io.github.mangi.eta.data.repository.SessionStateStore
 import io.github.mangi.eta.data.repository.ProviderRepository
 import io.github.mangi.eta.ui.app.PredictiveBackController
 import io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository
@@ -48,6 +49,7 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         }
         SettingsDataStore.init(this)
         ConversationSummaryStore.init(this)
+        SessionStateStore.init(this)
         val predictiveBackEnabled = runBlocking(Dispatchers.IO) {
             AppearanceSettingsRepository.settings().predictiveBackEnabled
         }

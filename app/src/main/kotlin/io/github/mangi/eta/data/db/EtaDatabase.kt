@@ -23,13 +23,15 @@ import androidx.room.migration.Migration
         SkillRegistryEntity::class,
         McpServerEntity::class,
         ConversationSummaryEntity::class,
+        ConversationSessionStateEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = false,
 )
 internal abstract class EtaDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
     abstract fun conversationSummaryDao(): ConversationSummaryDao
+    abstract fun conversationSessionStateDao(): ConversationSessionStateDao
     abstract fun providerDao(): ProviderDao
     abstract fun runtimeRunDao(): RuntimeRunDao
     abstract fun skillDao(): SkillDao
@@ -60,6 +62,7 @@ internal abstract class EtaDatabase : RoomDatabase() {
                         MIGRATION_16_17,
                         MIGRATION_17_18,
                         MIGRATION_18_19,
+                        MIGRATION_19_20,
                     )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
@@ -112,6 +115,18 @@ internal abstract class EtaDatabase : RoomDatabase() {
                     "`conversation_id` TEXT NOT NULL, " +
                     "`summary` TEXT NOT NULL, " +
                     "`summarized_turns` INTEGER NOT NULL, " +
+                    "`updated_at` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`conversation_id`), " +
+                    "FOREIGN KEY(`conversation_id`) REFERENCES `conversations`(`id`) " +
+                    "ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+        }
+
+        internal val MIGRATION_19_20 = Migration(19, 20) { database ->
+            database.execSQL(
+                "CREATE TABLE IF NOT EXISTS `conversation_session_state` (" +
+                    "`conversation_id` TEXT NOT NULL, " +
+                    "`session_state` TEXT NOT NULL, " +
                     "`updated_at` INTEGER NOT NULL, " +
                     "PRIMARY KEY(`conversation_id`), " +
                     "FOREIGN KEY(`conversation_id`) REFERENCES `conversations`(`id`) " +
