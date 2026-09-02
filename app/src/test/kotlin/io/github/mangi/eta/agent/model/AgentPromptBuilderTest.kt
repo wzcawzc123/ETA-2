@@ -167,6 +167,9 @@ class AgentPromptBuilderTest {
         // 引导 Agent 主动使用 memory_search，避免该工具成为摆设。
         assertTrue(memory.contains("memory_search"))
         assertTrue(memory.contains("我们之前聊过什么"))
+        // 跨会话连续性：引导维护"进行中任务"。
+        assertTrue(memory.contains("进行中任务"))
+        assertTrue(memory.contains("继续上次"))
         assertEquals("现在改用英文回答", messages.getJSONObject(messages.length() - 1).getString("content"))
     }
 

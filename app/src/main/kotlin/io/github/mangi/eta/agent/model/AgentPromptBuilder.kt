@@ -138,6 +138,10 @@ internal object AgentPromptBuilder {
                     "“我们之前聊过什么”“上次关于 X 的决定是什么”“我/用户有什么偏好或固定习惯”）；" +
                     "检索命中后务必在答复中结合命中片段，而不只是复述查询。"
             )
+            appendLine(
+                "需要跨会话持续的事（多步骤/长期任务、用户在多个会话间延续的工作）：在“# 核心记忆”下维护“### 进行中任务”小节，" +
+                    "记录任务目标与当前进度；任务完成或用户明确放弃时清除该小节。用户说“继续上次/接着做”时先读取该小节再行动。"
+            )
             if (context.coreContent.isNotBlank()) {
                 appendLine()
                 appendLine("<memory_core>")
