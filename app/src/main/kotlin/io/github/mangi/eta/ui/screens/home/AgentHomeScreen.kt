@@ -1,13 +1,10 @@
 package io.github.mangi.eta.ui.screens.home
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.ui.components.AgentChatBody
 import io.github.mangi.eta.ui.components.CacheHitRateHeader
 import io.github.mangi.eta.ui.components.chatConversationCompositionKey
@@ -21,7 +18,7 @@ import io.github.mangi.eta.ui.model.AgentModelPickerUiState
  *
  * 顶部入口统一由 [io.github.mangi.eta.ui.app.AgentAppShell] 提供，
  * 本 Screen 只负责消息流、Run trace、工具摘要和底部输入框。
- * 顶部居中显示当前 run 的缓存命中率。
+ * 顶部居中是当前 run 的缓存命中率小胶囊（流式占一行，不遮挡消息）。
  */
 @Composable
 internal fun AgentHomeScreen(
@@ -33,7 +30,8 @@ internal fun AgentHomeScreen(
     modifier: Modifier = Modifier,
 ) {
     key(chatConversationCompositionKey(conversationKey)) {
-        Box(modifier = modifier.fillMaxSize()) {
+        Column(modifier = modifier.fillMaxSize()) {
+            CacheHitRateHeader(latestUsage(state.messages))
             AgentChatBody(
                 messages = state.messages,
                 modelPickerState = modelPickerState,
@@ -67,14 +65,7 @@ internal fun AgentHomeScreen(
                 onRunTraceClick = { onAction(AgentHomeAction.ExpandRunTrace) },
                 onOpenBrowser = { onAction(AgentHomeAction.OpenBrowser) },
                 isDrawerOpen = isDrawerOpen,
-                modifier = Modifier.fillMaxSize(),
-            )
-            // 顶部居中悬浮胶囊：不占布局空间、不推挤消息列表。
-            CacheHitRateHeader(
-                usage = latestUsage(state.messages),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 8.dp),
+                modifier = Modifier.weight(1f),
             )
         }
     }

@@ -2,6 +2,7 @@ package io.github.mangi.eta.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -26,30 +27,34 @@ internal fun latestUsage(messages: List<AgentChatMessageUi>): TokenUsageUi? =
     }
 
 /**
- * 聊天页顶部居中的缓存命中率**悬浮小胶囊**（overlay，不占布局空间、不推挤/遮挡消息）。
- * 无 usage 数据时不显示（只在 run 产生 usage 后出现）。
- * 传入的 [modifier] 由调用方用 `BoxScope.align(TopCenter)` 定位；内部自带半透明底以提升可读性。
+ * 聊天区顶部居中的缓存命中率小胶囊（**流式布局**：占一行、水平居中，消息列表从它下方开始，
+ * 不叠加/遮挡正文，也不随消息滚动穿行）。
+ *
+ * 无 usage 数据时不占位、不显示（只在 run 产生 usage 后出现）。
  */
 @Composable
-internal fun CacheHitRateHeader(
-    usage: TokenUsageUi?,
-    modifier: Modifier = Modifier,
-) {
+internal fun CacheHitRateHeader(usage: TokenUsageUi?) {
     if (usage == null) return
     val percent = (usage.cacheHitRate * 100).roundToInt()
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, bottom = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "缓存命中 $percent%",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+        ) {
+            Text(
+                text = "缓存命中 $percent%",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
