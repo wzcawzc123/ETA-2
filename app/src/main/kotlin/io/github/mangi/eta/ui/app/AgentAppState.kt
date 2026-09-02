@@ -28,7 +28,7 @@ import io.github.mangi.eta.agent.model.AgentFileReferencePolicy
 import io.github.mangi.eta.agent.model.AgentFileReferencePromptCodec
 import io.github.mangi.eta.agent.model.AgentHistorySummary
 import io.github.mangi.eta.agent.model.AgentHistoryWindow
-import io.github.mangi.eta.agent.model.AgentFactRules
+import io.github.mangi.eta.agent.model.MemoryDistillRules
 import io.github.mangi.eta.agent.model.LlmAgentFactExtractor
 import io.github.mangi.eta.agent.model.LlmConversationSummarizer
 import io.github.mangi.eta.agent.model.ProviderClientFactory
@@ -1261,16 +1261,32 @@ internal class AgentAppState(
                 val facts = extractor.extractFacts(userText, result.content)
                 if (facts.isEmpty()) return@launch
                 val snapshot = AgentMemoryRepository.snapshot()
-                val merged = AgentFactRules.dedupeAndClamp(facts, snapshot.content)
-                if (merged.isEmpty()) return@launch
-                val content = "\n" + merged.joinToString("\n") { "- [沉淀] $it" }
-                when (
-                    AgentMemoryRepository.mutate(
-                        AgentMemoryMutation.Append(snapshot.revision, content)
+                // Mem0 式：判定 add/update/noop，而非无脑追加（防重复堆积、实现"更新/合并"而非堆副本）。
+                val plan = MemoryDistillRules.plan(facts, snapshot.content.split('\n'))
+                if (plan.additions.isEmpty() && plan.updates.isEmpty()) return@launch
+                var revision = snapshot.revision
+                // 先"覆盖/更新"已有行：每次用最新 revision，冲突则整体放弃（静默，与既有行为一致）。
+                for (update in plan.updates) {
+                    val result = AgentMemoryRepository.mutate(
+                        AgentMemoryMutation.ReplaceRange(
+                            revision,
+                            update.startLine,
+                            update.startLine,
+                            "- [沉淀] ${update.content}",
+                        )
                     )
-                ) {
-                    is AgentMemoryWriteResult.Success -> Unit
-                    is AgentMemoryWriteResult.Conflict -> Unit
+                    when (result) {
+                        is AgentMemoryWriteResult.Success -> revision = result.snapshot.revision
+                        is AgentMemoryWriteResult.Conflict -> return@launch
+                    }
+                }
+                // 再追加"新增事实"。
+                if (plan.additions.isNotEmpty()) {
+                    val content = "\n" + plan.additions.joinToString("\n") { "- [沉淀] $it" }
+                    when (AgentMemoryRepository.mutate(AgentMemoryMutation.Append(revision, content))) {
+                        is AgentMemoryWriteResult.Success -> Unit
+                        is AgentMemoryWriteResult.Conflict -> Unit
+                    }
                 }
             }
         }
