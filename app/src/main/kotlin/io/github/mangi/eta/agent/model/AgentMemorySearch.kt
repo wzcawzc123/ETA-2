@@ -15,6 +15,8 @@ internal object AgentMemorySearch {
         val source: String,
         val snippet: String,
         val score: Int,
+        /** 该命中来自哪个会话（摘要类命中才有），让 agent 区分"当前会话"与"过去会话"，避免误归因。 */
+        val conversationLabel: String? = null,
     )
 
     /** 中文长词补字符 n-gram，降低整句成词导致的召回为 0。 */
@@ -59,13 +61,14 @@ internal object AgentMemorySearch {
         if (terms.isEmpty()) return emptyList()
 
         val hits = mutableListOf<Hit>()
-        summaries.forEach { (_, summary) ->
+        summaries.forEach { (conversationId, summary) ->
             val score = scoreText(summary, terms)
             if (score > 0) {
                 hits += Hit(
                     source = SOURCE_SUMMARY,
                     snippet = summary.trim().take(MAX_SNIPPET_CHARS),
                     score = score,
+                    conversationLabel = conversationId,
                 )
             }
         }
@@ -83,7 +86,7 @@ internal object AgentMemorySearch {
                 }
             }
         return hits
-            .distinctBy { it.source + it.snippet }
+            .distinctBy { it.source + it.conversationLabel + it.snippet }
             .sortedByDescending { it.score }
             .take(MAX_HITS)
     }

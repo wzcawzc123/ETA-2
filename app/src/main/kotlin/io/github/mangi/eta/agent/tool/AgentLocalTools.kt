@@ -400,10 +400,13 @@ internal class AgentLocalTools(
             .put("hits", JSONArray().apply {
                 result.forEach { hit ->
                     put(
-                        JSONObject()
-                            .put("source", hit.source)
-                            .put("snippet", hit.snippet)
-                            .put("score", hit.score)
+                        JSONObject().apply {
+                            put("source", hit.source)
+                            put("snippet", hit.snippet)
+                            put("score", hit.score)
+                            // 标注来源会话，agent 借此区分"当前会话/过去会话"，避免把过去内容当作当前会话。
+                            hit.conversationLabel?.let { put("conversation", it) }
+                        }
                     )
                 }
             })

@@ -100,7 +100,7 @@ internal object AgentMemoryToolCatalog {
             .put(
                 AgentToolSchema.function(
                     name = "memory_search",
-                    description = "Search local conversation summaries and MEMORY.md headings for earlier context (e.g. what was discussed or decided in a past conversation). Returns up to 8 matching snippets; summaries cover turns trimmed from the visible window of long conversations.",
+                    description = "Search local conversation summaries and MEMORY.md full text for earlier context (what was discussed/decided/remembered). Returns up to 8 matching snippets. Summary hits carry a 'conversation' field identifying which PAST conversation they belong to — treat those as from another session, never as part of the current conversation; MEMORY.md hits carry no conversation field.",
                     parameters = JSONObject()
                         .put("type", "object")
                         .put(

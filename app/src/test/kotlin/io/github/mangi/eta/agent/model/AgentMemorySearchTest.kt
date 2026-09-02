@@ -56,6 +56,21 @@ class AgentMemorySearchTest {
     }
 
     @Test
+    fun searchSummaryHitCarriesConversationLabel() {
+        val summaries = listOf(
+            "conv-abc" to "讨论了支付流程和密码重置",
+            "conv-def" to "关于周末出行安排",
+        )
+        val hits = AgentMemorySearch.search("支付", summaries, "# 核心记忆")
+        val hit = hits.first { it.source == AgentMemorySearch.SOURCE_SUMMARY && it.snippet.contains("支付") }
+        assertEquals("conv-abc", hit.conversationLabel)
+        // MEMORY 命中不含来源会话（conversationLabel 为 null）
+        val memHit = AgentMemorySearch.search("支付", summaries, "# 核心记忆\n用户偏好用大额支付")
+            .first { it.source == AgentMemorySearch.SOURCE_MEMORY }
+        assertEquals(null, memHit.conversationLabel)
+    }
+
+    @Test
     fun queryTermsAddsNgramsForChineseLongTokens() {
         val terms = AgentMemorySearch.queryTerms("用户偏好在广州")
         assertTrue(terms.contains("用户偏好在广州"))
