@@ -104,6 +104,11 @@ internal object AgentPromptBuilder {
                 )
             )
         }
+        // 确定性会话锚点：始终注入本会话真正的第一条用户提问（字节不变 → 稳定前缀、可缓存），
+        // 长会话裁剪后也能准确 recall"最开始问了什么"，避免把中段当最早。
+        AgentConversationAnchor.firstUserMessage(history)?.let { anchor ->
+            messages.put(systemMessage("<conversation_start>\n本会话最初的提问：\n$anchor\n</conversation_start>"))
+        }
         buildMemorySystemMessage(memoryContext)?.let(messages::put)
         buildSkillSystemMessage(skillContext)?.let(messages::put)
         buildConversationSummaryMessage(conversationSummary)?.let(messages::put)

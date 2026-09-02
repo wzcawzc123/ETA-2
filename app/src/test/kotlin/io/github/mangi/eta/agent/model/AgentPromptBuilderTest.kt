@@ -277,6 +277,9 @@ class AgentPromptBuilderTest {
         assertTrue(stable.contains("<memory_core>"))
         assertTrue(stable.contains("<conversation_summary>"))
         assertTrue(stable.contains("open_and_exec"))
+        // 确定性会话锚点：稳定前缀内应含"真正的首条提问"（这里 history 首条为 h0）。
+        assertTrue(stable.contains("<conversation_start>"))
+        assertTrue(stable.contains("h0"))
         // 不携带易变元数据：避免每次记忆写入都破坏前缀缓存。
         assertFalse(stable.contains("revision="))
         assertFalse(stable.contains("core_budget_chars"))
