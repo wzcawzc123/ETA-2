@@ -1,9 +1,11 @@
 package io.github.mangi.eta.ui.screens.chat
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import io.github.mangi.eta.ui.components.AgentChatBody
 import io.github.mangi.eta.ui.components.CacheHitRateHeader
@@ -26,8 +28,7 @@ internal fun AgentChatScreen(
     modifier: Modifier = Modifier,
 ) {
     key(chatConversationCompositionKey(conversationKey)) {
-        Column(modifier = modifier.fillMaxSize()) {
-            CacheHitRateHeader(latestUsage(state.messages))
+        Box(modifier = modifier.fillMaxSize()) {
             AgentChatBody(
                 messages = state.messages,
                 modelPickerState = modelPickerState,
@@ -60,7 +61,14 @@ internal fun AgentChatScreen(
                 },
                 onRunTraceClick = { /* 对话页暂不做 Run trace 展开 */ },
                 onOpenBrowser = { onAction(AgentChatAction.OpenBrowser) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
+            )
+            // 顶部居中悬浮胶囊：不占布局空间、不推挤消息列表。
+            CacheHitRateHeader(
+                usage = latestUsage(state.messages),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp),
             )
         }
     }
