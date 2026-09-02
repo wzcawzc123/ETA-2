@@ -3,7 +3,6 @@ package io.github.mangi.eta.ui.model
 import androidx.compose.runtime.Immutable
 import io.github.mangi.eta.agent.model.AgentFileReference
 import io.github.mangi.eta.agent.model.AgentModelClient
-import io.github.mangi.eta.agent.model.AgentTokenBudget
 import io.github.mangi.eta.data.model.ReasoningEffort
 
 @Immutable
@@ -78,10 +77,6 @@ data class TokenUsageUi(
             outputTokens == null &&
             reasoningTokens == null &&
             cachedTokens == null
-
-    /** 缓存命中率（cachedTokens/inputTokens，[0,1]）；input 缺失/非法时为 0。 */
-    val cacheHitRate: Double
-        get() = AgentTokenBudget.cacheHitRate(inputTokens, cachedTokens)
 }
 
 @Immutable
