@@ -19,6 +19,26 @@ class AgentHistorySummaryTest {
     }
 
     @Test
+    fun needsRegenerationTriggersOnDenseContent() {
+        // 轮数未到阈值，但未总结内容已很密集 → 触发
+        assertTrue(
+            AgentHistorySummary.needsRegeneration(
+                3,
+                pendingChars = AgentHistorySummary.SUMMARY_DENSE_CHARS_TRIGGER,
+            )
+        )
+        // 轮数与内容都不足 → 不触发
+        assertFalse(AgentHistorySummary.needsRegeneration(3, pendingChars = 100))
+    }
+
+    @Test
+    fun serializedCharCountGrowsWithContent() {
+        val small = listOf(msg("user", "u"))
+        val large = listOf(msg("user", "x".repeat(1000)))
+        assertTrue(AgentHistorySummary.serializedCharCount(large) > AgentHistorySummary.serializedCharCount(small))
+    }
+
+    @Test
     fun trimmedUserTurnCountCountsUsersBeforeWindowStart() {
         val full = listOf(
             msg("user", "u1"), msg("assistant", "a1"),
@@ -29,6 +49,18 @@ class AgentHistorySummaryTest {
         assertEquals(2, AgentHistorySummary.trimmedUserTurnCount(full, windowed))
         assertEquals(0, AgentHistorySummary.trimmedUserTurnCount(full, full))
         assertEquals(0, AgentHistorySummary.trimmedUserTurnCount(emptyList(), windowed))
+    }
+
+    @Test
+    fun trimmedUserTurnCountHandlesDuplicateUserContent() {
+        // 两条 user 消息内容完全相同：若按内容 indexOfFirst 会匹配到更早那条而算错。
+        val dup = "相同的消息"
+        val full = listOf(
+            msg("user", dup), msg("assistant", "a1"),
+            msg("user", dup), msg("assistant", "a2"),
+        )
+        val windowed = full.subList(2, full.size).toList() // 从第二条 dup 开始
+        assertEquals(1, AgentHistorySummary.trimmedUserTurnCount(full, windowed))
     }
 
     @Test

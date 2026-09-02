@@ -12,28 +12,38 @@ internal object AgentHistorySummary {
     const val MAX_SUMMARY_TURNS_TEXT_CHARS = 12_000
     const val MAX_TURN_CONTENT_CHARS = 800
 
-    /** 距离上次摘要后又新增被裁剪的用户轮数达到阈值才重新生成（增量，避免每轮触发）。 */
+    /** 未总结内容格式化后达到该字符数时，即使轮数未到阈值也触发摘要（避免"短但密集"的对话丢信息）。 */
+    const val SUMMARY_DENSE_CHARS_TRIGGER = 6_000
+
+    /** 距离上次摘要后又新增被裁剪的用户轮数达到阈值，或未总结内容体积已超阈值时才重新生成（增量，避免每轮触发）。 */
     fun needsRegeneration(
         trimmedTurnsSinceLastSummary: Int,
         thresholdTurns: Int = DEFAULT_REGENERATE_THRESHOLD_TURNS,
-    ): Boolean = trimmedTurnsSinceLastSummary >= thresholdTurns
+        pendingChars: Int = 0,
+    ): Boolean =
+        trimmedTurnsSinceLastSummary >= thresholdTurns ||
+            pendingChars >= SUMMARY_DENSE_CHARS_TRIGGER
 
-    /** 统计完整历史相对窗口历史被裁剪掉的用户轮数。 */
+    /** 待总结轮次序列化后的字符体积（供密度触发判定，可 kotlinc 单测）。 */
+    fun serializedCharCount(turns: List<AgentModelClient.ConversationMessage>): Int =
+        serializeTurns(turns).length
+
+    /**
+     * 统计完整历史相对窗口历史被裁剪掉的用户轮数。
+     *
+     * 窗口始终是完整历史的后缀（AgentHistoryWindow.trim 返回 subList 切片），因此被裁掉
+     * 的部分 = fullHistory.take(fullHistory.size - windowedHistory.size)。直接用**索引差**
+     * 计算，而非按内容 indexOfFirst——否则当两条 user 消息内容完全相同时可能匹配到更早的
+     * 那条，导致被裁轮数统计错误。
+     */
     fun trimmedUserTurnCount(
         fullHistory: List<AgentModelClient.ConversationMessage>,
         windowedHistory: List<AgentModelClient.ConversationMessage>,
     ): Int {
         if (fullHistory.isEmpty()) return 0
-        val firstUserIndex = windowedHistory.indexOfFirst { it.role == "user" }
-        if (firstUserIndex < 0) return fullHistory.count { it.role == "user" }
-        val firstUser = windowedHistory[firstUserIndex]
-        val fullIndexOfFirstUser = fullHistory.indexOfFirst {
-            it.role == firstUser.role &&
-                it.content == firstUser.content &&
-                it.toolCallId == firstUser.toolCallId
-        }
-        if (fullIndexOfFirstUser < 0) return fullHistory.count { it.role == "user" }
-        return fullHistory.take(fullIndexOfFirstUser).count { it.role == "user" }
+        val cutIndex = fullHistory.size - windowedHistory.size
+        if (cutIndex <= 0) return 0
+        return fullHistory.take(cutIndex).count { it.role == "user" }
     }
 
     /**

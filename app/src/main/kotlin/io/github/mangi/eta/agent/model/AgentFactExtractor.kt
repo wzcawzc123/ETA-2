@@ -11,13 +11,21 @@ internal fun interface AgentFactExtractor {
 /** 事实提取的后处理纯逻辑（可 kotlinc 单测）。 */
 internal object AgentFactRules {
 
-    const val MAX_FACTS_PER_RUN = 3
+    const val MAX_FACTS_PER_RUN = 5
     const val MAX_FACT_CHARS = 400
     const val MAX_INPUT_CHARS = 4_000
 
-    fun buildPrompt(userText: String, assistantText: String): String = buildString {
-        appendLine("从以下对话中提取 0-3 条长期稳定的用户事实（名字、身份、偏好、关系、重要背景）。")
-        appendLine("只提取明确陈述的稳定信息，不要推断；不要提取密钥、验证码或一次性信息。")
+    fun buildPrompt(
+        userText: String,
+        assistantText: String,
+        maxFacts: Int = MAX_FACTS_PER_RUN,
+    ): String = buildString {
+        appendLine(
+            "从以下对话中提取 0-$maxFacts 条长期稳定的用户事实" +
+                "（名字、身份、偏好、关系、持续项目、环境与工具配置、重要背景）。"
+        )
+        appendLine("只提取明确陈述的稳定信息，不要推断；不要提取密钥、验证码、临时任务或一次性信息。")
+        appendLine("若新事实与已有记忆冲突，用“更正：…”表达，不要保留两者矛盾版本。")
         appendLine("每行输出一条事实，以 \"- \" 开头。")
         appendLine()
         appendLine("用户：${userText.take(MAX_INPUT_CHARS)}")
@@ -45,15 +53,17 @@ internal object AgentFactRules {
         "无可用",
     )
 
-    fun parseFacts(text: String): List<String> =
+    fun parseFacts(text: String, maxFacts: Int = MAX_FACTS_PER_RUN): List<String> =
         text.lineSequence()
             .map { it.trim() }
             .filter { it.startsWith("- ") || it.startsWith("• ") }
             .map { it.removePrefix("- ").removePrefix("• ").trim() }
             .filter { it.length >= 3 }
-            .filter { fact -> NEGATIVE_FACTS.none { fact.contains(it) } }
+            // 负向结论模板在 LLM 输出中是"独立整行"（如"暂无长期稳定事实"），
+            // 只用行首匹配，避免把"用户没有明确偏好"这类真实事实当作负向结论误删。
+            .filter { fact -> NEGATIVE_FACTS.none { fact.startsWith(it) } }
             .distinct()
-            .take(MAX_FACTS_PER_RUN)
+            .take(maxFacts)
             .toList()
 
     /** 与 MEMORY.md 已有内容做归一化 + 语义近似去重 + 长度/数量预算。 */
@@ -72,7 +82,7 @@ internal object AgentFactRules {
         for (fact in facts) {
             val trimmed = fact.trim().take(MAX_FACT_CHARS)
             if (trimmed.length < 3) continue
-            if (NEGATIVE_FACTS.any { trimmed.contains(it) }) continue
+            if (NEGATIVE_FACTS.any { trimmed.startsWith(it) }) continue
             val norm = normalize(trimmed)
             if (memoryNorms.any { similar(norm, it) }) continue
             if (result.any { similar(norm, normalize(it)) }) continue

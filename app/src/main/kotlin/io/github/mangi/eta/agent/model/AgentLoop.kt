@@ -40,6 +40,12 @@ internal class AgentLoop(
     private val sensitiveToolCallIds = linkedSetOf<String>()
     private var pendingToolImageMessage: JSONObject? = null
 
+    /** 上一轮真实 prompt token（用于计算每轮边际成本，自适应预算）。 */
+    private var lastPromptTokens: Int? = null
+
+    /** 由真实 token 用量反馈修正的"每轮 token"估值（代理 AgentTokenBudget）。 */
+    private var estimatedTokensPerRound: Int? = null
+
     fun reasoningSnapshot(): String = accumulatedReasoning.toString().trim()
 
     fun sensitiveToolCallIdsSnapshot(): Set<String> = sensitiveToolCallIds.toSet()
@@ -71,12 +77,18 @@ internal class AgentLoop(
                     // 时重试。这样既不重复执行工具，也不会在已输出部分内容后重复拼接导致乱序。
                     var deliveredAnyBlockDelta = false
                     runController.throwIfCancelled()
+                    // 长单次运行按预算裁剪喂给模型的副本（保留最后 user + 最近 N 个完整工具轮）。
+                    val requestMessages = AgentLoopContext.trimInRun(
+                        messages,
+                        config.contextWindow,
+                        tokensPerRoundEstimate = estimatedTokensPerRound,
+                    )
+                    warnIfOverWindow(requestMessages)
                     val response = try {
                         provider.complete(
                             request = ProviderRequest(
                                 config = config,
-                                // 长单次运行按预算裁剪喂给模型的副本（保留最后 user + 最近 N 个完整工具轮）。
-                                messages = AgentLoopContext.trimInRun(messages, config.contextWindow),
+                                messages = requestMessages,
                                 tools = tools,
                             ),
                             runController = runController,
@@ -86,6 +98,10 @@ internal class AgentLoop(
                                 if (providerEvent.kind == AssistantBlockKind.THINKING) {
                                     accumulatedReasoning.append(providerEvent.delta)
                                 }
+                            }
+                            // 用真实 prompt token 用量反馈，自适应修正"每轮"预算（工具密集轮会自然增大）。
+                            if (providerEvent is ProviderEvent.Usage) {
+                                observeTokenUsage(providerEvent.usage.inputTokens)
                             }
                             providerEvent.toAgentEvent(round)?.let(onEvent)
                         }
@@ -374,6 +390,24 @@ internal class AgentLoop(
                 )
             )
         }
+    }
+
+    /** 仅做"明显超窗"的告警，避免 provider 静默截断早期消息导致失忆却无从得知。 */
+    private fun warnIfOverWindow(requestMessages: JSONArray) {
+        val window = config.contextWindow ?: return
+        if (window <= 0) return
+        val estimated = AgentLoopContext.estimatedChars(requestMessages)
+        if (estimated <= window.toLong()) return
+        AndroidAgentLogger.warnThrottled("agent_over_window") {
+            "Agent request ~${estimated} chars exceeds context window $window; early history may be truncated"
+        }
+    }
+
+    /** 用真实每轮增量更新自适应预算估计；无信号时仅回退（保留上一估值或默认值）。 */
+    private fun observeTokenUsage(inputTokens: Int?) {
+        val marginal = AgentTokenBudget.marginalRoundCost(lastPromptTokens, inputTokens)
+        estimatedTokensPerRound = AgentTokenBudget.adaptiveTokensPerRound(estimatedTokensPerRound, marginal)
+        lastPromptTokens = inputTokens
     }
 
     private fun discardPendingToolImageMessage() {

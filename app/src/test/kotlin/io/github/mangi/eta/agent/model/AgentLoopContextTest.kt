@@ -79,4 +79,33 @@ class AgentLoopContextTest {
         val def = AgentLoopContext.trimInRun(messages, null)
         assertTrue(def.length() > out.length())
     }
+
+    @Test
+    fun heavyToolRounds_trimMoreThanLight() {
+        val heavy = JSONArray().apply {
+            put(msg("user", "u"))
+            repeat(60) { round ->
+                put(JSONObject().put("role", "assistant").put("content", "a".repeat(2000)))
+                put(JSONObject().put("role", "tool").put("content", "r".repeat(2000)))
+            }
+        }
+        val light = JSONArray().apply {
+            put(msg("user", "u"))
+            repeat(60) { round ->
+                put(msg("assistant", "a$round"))
+                put(msg("tool", "r$round"))
+            }
+        }
+        val heavyOut = AgentLoopContext.trimInRun(heavy, 32_000)
+        val lightOut = AgentLoopContext.trimInRun(light, 32_000)
+        assertTrue(heavyOut.length() < lightOut.length())
+        assertEquals("u", heavyOut.getJSONObject(0).getString("content"))
+    }
+
+    @Test
+    fun estimatedChars_growsWithContent() {
+        val small = messagesOf(msg("user", "hi"))
+        val large = messagesOf(msg("user", "x".repeat(1000)))
+        assertTrue(AgentLoopContext.estimatedChars(large) > AgentLoopContext.estimatedChars(small))
+    }
 }

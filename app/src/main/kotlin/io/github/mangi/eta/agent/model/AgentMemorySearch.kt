@@ -49,17 +49,17 @@ internal object AgentMemorySearch {
         }
     }
 
-    /** 在摘要列表与标题列表中检索，返回按分数降序的去重结果。 */
+    /** 在摘要列表与 MEMORY.md 全文中检索，返回按分数降序的去重结果。 */
     fun search(
         query: String,
         summaries: List<Pair<String, String>>,
-        headings: List<String>,
+        memoryContent: String,
     ): List<Hit> {
         val terms = queryTerms(query)
         if (terms.isEmpty()) return emptyList()
 
         val hits = mutableListOf<Hit>()
-        summaries.forEach { (conversationId, summary) ->
+        summaries.forEach { (_, summary) ->
             val score = scoreText(summary, terms)
             if (score > 0) {
                 hits += Hit(
@@ -69,16 +69,19 @@ internal object AgentMemorySearch {
                 )
             }
         }
-        headings.forEach { heading ->
-            val score = scoreText(heading, terms)
-            if (score > 0) {
-                hits += Hit(
-                    source = SOURCE_MEMORY,
-                    snippet = heading.trim().take(MAX_SNIPPET_CHARS),
-                    score = score,
-                )
+        memoryContent.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { line ->
+                val score = scoreText(line, terms)
+                if (score > 0) {
+                    hits += Hit(
+                        source = SOURCE_MEMORY,
+                        snippet = line.take(MAX_SNIPPET_CHARS),
+                        score = score,
+                    )
+                }
             }
-        }
         return hits
             .distinctBy { it.source + it.snippet }
             .sortedByDescending { it.score }

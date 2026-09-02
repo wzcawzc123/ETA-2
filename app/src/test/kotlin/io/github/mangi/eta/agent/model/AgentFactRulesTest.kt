@@ -12,8 +12,9 @@ class AgentFactRulesTest {
         val prompt = AgentFactRules.buildPrompt("我叫小明", "好的，小明")
         assertTrue(prompt.contains("用户：我叫小明"))
         assertTrue(prompt.contains("助手：好的，小明"))
-        assertTrue(prompt.contains("0-3 条"))
+        assertTrue(prompt.contains("0-5 条"))
         assertTrue(prompt.contains("不要提取密钥"))
+        assertTrue(prompt.contains("更正："))
         assertTrue(prompt.contains("每行输出一条事实"))
         // 无助手内容时不输出助手段
         assertFalse(AgentFactRules.buildPrompt("hi", "").contains("助手："))
@@ -32,7 +33,7 @@ class AgentFactRulesTest {
         val merged = AgentFactRules.dedupeAndClamp(facts, existingMemory = "用户住在上海")
         assertEquals(listOf("用户偏好中文"), merged)
         val many = (1..10).map { "事实$it" }
-        assertEquals(3, AgentFactRules.dedupeAndClamp(many, "").size)
+        assertEquals(AgentFactRules.MAX_FACTS_PER_RUN, AgentFactRules.dedupeAndClamp(many, "").size)
     }
 
     @Test
@@ -49,6 +50,13 @@ class AgentFactRulesTest {
     fun parseFactsFiltersNegativeConclusions() {
         val raw = "- 用户偏好中文\n- 暂无长期稳定事实。\n- 无可用事实"
         assertEquals(listOf("用户偏好中文"), AgentFactRules.parseFacts(raw))
+    }
+
+    @Test
+    fun parseFactsKeepsFactsContainingNegativeWordsNotLeading() {
+        // "没有明确""不存在"是负向词，但作为内容的一部分（非行首）应被视为真实事实保留。
+        val raw = "- 用户没有明确偏好\n- 用户偏好中文"
+        assertEquals(listOf("用户没有明确偏好", "用户偏好中文"), AgentFactRules.parseFacts(raw))
     }
 
     @Test

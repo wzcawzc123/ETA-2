@@ -387,12 +387,8 @@ internal class AgentLocalTools(
         val result = runBlocking {
             runCatching {
                 val summaries = ConversationSummaryStore.all()
-                val headings = AgentMemoryRepository.snapshot().content
-                    .lineSequence()
-                    .map { it.trim() }
-                    .filter { it.startsWith("#") }
-                    .toList()
-                AgentMemorySearch.search(query, summaries, headings)
+                val memoryContent = AgentMemoryRepository.snapshot().content
+                AgentMemorySearch.search(query, summaries, memoryContent)
             }.getOrElse { emptyList() }
         }
         if (result.isEmpty()) {

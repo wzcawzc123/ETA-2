@@ -1204,10 +1204,12 @@ internal class AgentAppState(
                 val existingTurns = existing?.summarizedTurns ?: 0
                 val existingSummary = existing?.summary
                 val newSinceLast = trimmedUsers - existingTurns
-                if (!AgentHistorySummary.needsRegeneration(newSinceLast)) return@launch
                 // 增量：只把上次已总结之后新被裁的轮次交给模型（修 P1-2 重复总结）。
                 val incremental = AgentHistorySummary.incrementalTurnsSince(trimmedTurns, existingTurns)
                 if (incremental.isEmpty()) return@launch
+                // 轮数未到阈值但内容已很密集时也触发，避免短对话信息在裁剪中丢失。
+                val pendingChars = AgentHistorySummary.serializedCharCount(incremental)
+                if (!AgentHistorySummary.needsRegeneration(newSinceLast, pendingChars = pendingChars)) return@launch
                 val summarizer = LlmConversationSummarizer(config, ProviderClientFactory.getClient(config))
                 val newSummary = summarizer.summarize(existingSummary, incremental)
                 ConversationSummaryStore.upsert(conversationId, newSummary, trimmedUsers)

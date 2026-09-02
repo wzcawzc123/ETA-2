@@ -49,6 +49,8 @@ class AgentPromptBuilderTest {
         assertTrue(messages.systemContents().any { it.contains("读取或汇总屏幕信息") })
         assertTrue(messages.systemContents().any { it.contains("确认最终结果") })
         assertTrue(messages.systemContents().any { it.contains("后续操作依赖特定文本或应用出现") })
+        assertTrue(messages.systemContents().any { it.contains("不要重复已完成或已验证的工作") })
+        assertTrue(messages.systemContents().any { it.contains("回顾最初目标与已完成步骤") })
         assertFalse(messages.systemContents().any { it.contains("点击或打开应用后优先用 wait_for_text") })
         assertTrue(messages.systemContents().any { it.contains("只读取 UI 树，不附截图") })
         assertTrue(messages.systemContents().any { it.contains("include_screenshot=true") })
@@ -162,6 +164,9 @@ class AgentPromptBuilderTest {
         assertFalse(memory.contains("revision="))
         assertFalse(memory.contains("core_budget_chars"))
         assertTrue(memory.contains("用户以前偏好中文"))
+        // 引导 Agent 主动使用 memory_search，避免该工具成为摆设。
+        assertTrue(memory.contains("memory_search"))
+        assertTrue(memory.contains("我们之前聊过什么"))
         assertEquals("现在改用英文回答", messages.getJSONObject(messages.length() - 1).getString("content"))
     }
 
@@ -222,6 +227,61 @@ class AgentPromptBuilderTest {
         assertFalse(messages.systemContents().any { it.contains("<conversation_summary>") })
     }
 
+    /**
+     * 缓存友好性不变量：稳定前缀（system prompt + 记忆 + skill + 摘要）必须是连续、字节稳定的
+     * 前缀，位于易变历史/当前用户之前；且不携带会击穿前缀缓存的易变元数据（revision/bytes/预算）。
+     * 这样 L1 稳定区可被 provider 缓存并按折扣计费，只有 L2/L3 易变尾部按全价。
+     */
+    @Test
+    fun stablePrefixPrecedesVolatileTail_forCacheFriendlyOrdering() {
+        val history = List(40) { index ->
+            AgentModelClient.ConversationMessage(
+                role = if (index % 2 == 0) "user" else "assistant",
+                content = "h$index",
+            )
+        }
+        val messages = AgentPromptBuilder.buildInitialMessages(
+            config = modelConfig("自定义约束", terminalTools = true, browserTools = false),
+            prompt = "当前问题",
+            images = emptyList(),
+            history = history,
+            skillContext = SkillContext.EMPTY,
+            memoryContext = AgentMemoryContext(
+                enabled = true,
+                revision = "b".repeat(64),
+                byteSize = 128,
+                coreContent = "# 核心记忆\n用户偏好中文",
+                coreTruncated = false,
+                headingIndex = "# 核心记忆\n# 项目",
+                coreBudgetChars = 8_000,
+            ),
+            conversationSummary = "早期讨论过支付流程",
+        )
+
+        // 稳定前缀 = 全部位于第一个 history/current 之前的 system 消息，且必须是连续 system。
+        val stableCount = messages.firstNonSystemIndex()
+        assertTrue("应有稳定前缀，got stableCount=$stableCount", stableCount >= 1)
+        (0 until stableCount).forEach { i ->
+            assertEquals("system", messages.getJSONObject(i).getString("role"))
+        }
+        // 易变尾部从第一个非 system（history 的首条 user）开始。
+        assertEquals("user", messages.getJSONObject(stableCount).getString("role"))
+
+        val stable = (0 until stableCount)
+            .map { messages.getJSONObject(it).getString("content") }
+            .joinToString("\n")
+        // 记忆/摘要/终端约束都在稳定前缀区内。
+        assertTrue(stable.contains("<memory_core>"))
+        assertTrue(stable.contains("<conversation_summary>"))
+        assertTrue(stable.contains("open_and_exec"))
+        // 不携带易变元数据：避免每次记忆写入都破坏前缀缓存。
+        assertFalse(stable.contains("revision="))
+        assertFalse(stable.contains("core_budget_chars"))
+
+        // 当前用户输入必须是最末一条（易变尾部之外）。
+        assertEquals("当前问题", messages.getJSONObject(messages.length() - 1).getString("content"))
+    }
+
     private fun modelConfig(
         systemPrompt: String,
         terminalTools: Boolean,
@@ -244,4 +304,12 @@ class AgentPromptBuilderTest {
             .map(::getJSONObject)
             .filter { message -> message.getString("role") == "system" }
             .map { message -> message.getString("content") }
+
+    /** 首个非 system 消息的下标；全部为 system 时返回 length()（表示无易变尾部）。 */
+    private fun JSONArray.firstNonSystemIndex(): Int {
+        for (i in 0 until length()) {
+            if (getJSONObject(i).getString("role") != "system") return i
+        }
+        return length()
+    }
 }

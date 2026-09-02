@@ -71,4 +71,40 @@ class AgentHistoryWindowTest {
         assertTrue(out.first().role == "user")
         assertTrue(out.size < h.size)
     }
+
+    @Test
+    fun measuredBudget_trimsHeavyRoundsMoreThanEstimate() {
+        // 每轮内容 3000 字符：重内容按体积预算只留极少量轮，远少于轮数粗估的 20 轮
+        val heavy = (0 until 38).flatMap { i ->
+            listOf(
+                AgentModelClient.ConversationMessage(role = "user", content = "u".repeat(3000)),
+                AgentModelClient.ConversationMessage(role = "assistant", content = "a".repeat(3000)),
+            )
+        }
+        val light = List(80) { msg(if (it % 2 == 0) "user" else "assistant") }
+        val heavyOut = AgentHistoryWindow.trim(heavy, 32_000)
+        val lightOut = AgentHistoryWindow.trim(light, 32_000)
+        assertTrue("heavy=$heavyOut should be trimmed to fewer messages than light=$lightOut", heavyOut.size < lightOut.size)
+        assertTrue(heavyOut.first().role == "user")
+    }
+
+    @Test
+    fun serializedChars_countsContentAndOverhead() {
+        val empty = AgentModelClient.ConversationMessage(role = "user")
+        val filled = AgentModelClient.ConversationMessage(role = "user", content = "你好")
+        assertTrue(AgentHistoryWindow.serializedChars(filled) > AgentHistoryWindow.serializedChars(empty))
+    }
+
+    @Test
+    fun maxUserRoundsByBudget_lightContentFitsMoreThanHeavy() {
+        val light = AgentHistoryWindow.maxUserRoundsByBudget(
+            List(100) { AgentModelClient.ConversationMessage(role = "user") },
+            32_000,
+        )
+        val heavy = AgentHistoryWindow.maxUserRoundsByBudget(
+            List(100) { AgentModelClient.ConversationMessage(role = "user", content = "x".repeat(5000)) },
+            32_000,
+        )
+        assertTrue(light > heavy)
+    }
 }
