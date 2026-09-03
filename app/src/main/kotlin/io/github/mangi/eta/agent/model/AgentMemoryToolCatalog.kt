@@ -118,5 +118,30 @@ internal object AgentMemoryToolCatalog {
                         .put("required", JSONArray().put("query")),
                 ),
             )
+            .put(
+                AgentToolSchema.function(
+                    name = "session_state_get",
+                    description = "Read the current conversation's structured session state (objective / completed / pending / decisions) that you maintain via session_state_update. Use it to answer 'our goal / what have we done / what are we deciding' or to resume.",
+                    parameters = JSONObject()
+                        .put("type", "object")
+                        .put("properties", JSONObject()),
+                ),
+            )
+            .put(
+                AgentToolSchema.function(
+                    name = "session_state_update",
+                    description = "Update the current conversation's structured session state (objective / completed / pending / decisions). Call it at key milestones so 'what we're doing / decided / done' is remembered deterministically. Keep entries concise; omit a field you don't need to change.",
+                    parameters = JSONObject()
+                        .put("type", "object")
+                        .put(
+                            "properties",
+                            JSONObject()
+                                .put("objective", JSONObject().put("type", "string").put("maxLength", 400))
+                                .put("completed", JSONObject().put("type", "array").put("items", JSONObject().put("type", "string")))
+                                .put("pending", JSONObject().put("type", "array").put("items", JSONObject().put("type", "string")))
+                                .put("decisions", JSONObject().put("type", "array").put("items", JSONObject().put("type", "string"))),
+                        ),
+                ),
+            )
     }
 }

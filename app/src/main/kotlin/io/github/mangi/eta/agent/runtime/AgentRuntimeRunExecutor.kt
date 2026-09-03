@@ -138,6 +138,7 @@ internal class AgentRuntimeRunExecutor(
                 memoryToolsEnabled = {
                     runBlocking { AgentMemoryRepository.isEnabled() }
                 },
+                currentConversationId = { request.handoff?.payload },
                 screenshotExcludedPackages = {
                     entrySurfaceGuard?.consumeScreenshotExcludedPackages().orEmpty()
                 },

@@ -11,6 +11,8 @@ import io.github.mangi.eta.agent.device.RootShellDeviceController
 import io.github.mangi.eta.agent.device.BoundedRootCommandExecutor
 import io.github.mangi.eta.agent.model.AgentMemorySearch
 import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.agent.model.SessionState
+import io.github.mangi.eta.agent.model.SessionStateCodec
 import io.github.mangi.eta.agent.model.AgentScreenObservationContract
 import io.github.mangi.eta.agent.model.AgentSensitiveToolPolicy
 import io.github.mangi.eta.agent.overlay.AgentHapticFeedback
@@ -40,6 +42,7 @@ import io.github.mangi.eta.core.HookSupport
 import io.github.mangi.eta.data.repository.AgentMemoryException
 import io.github.mangi.eta.data.repository.AgentMemoryMutation
 import io.github.mangi.eta.data.repository.AgentMemoryRepository
+import io.github.mangi.eta.data.repository.SessionStateStore
 import io.github.mangi.eta.data.repository.AgentMemoryWriteResult
 import io.github.mangi.eta.data.repository.ConversationSummaryStore
 import io.github.mangi.eta.agent.terminal.DetachedTaskSupervisor
@@ -77,6 +80,7 @@ internal class AgentLocalTools(
     private val memoryToolsEnabled: () -> Boolean = {
         runBlocking { AgentMemoryRepository.isEnabled() }
     },
+    private val currentConversationId: () -> String? = { null },
     private val screenshotExcludedPackages: () -> Set<String> = { emptySet() },
     private val supportsVision: () -> Boolean = { true },
     private val screenObservationProvider: (
@@ -201,6 +205,8 @@ internal class AgentLocalTools(
                 "memory_get" -> textResult(memoryGet(args))
                 "memory_write" -> textResult(memoryWrite(args))
                 "memory_search" -> textResult(memorySearch(args))
+                "session_state_get" -> textResult(sessionStateGet(args))
+                "session_state_update" -> textResult(sessionStateUpdate(args))
                 "skills_list" -> textResult(skillsList(args))
                 "skills_read" -> textResult(skillsRead(args))
                 "skills_read_resource" -> textResult(skillsReadResource(args))
@@ -412,6 +418,34 @@ internal class AgentLocalTools(
             })
             .toString()
     }
+
+    private fun sessionStateGet(args: JSONObject): String {
+        val cid = currentConversationId() ?: return errorResult("NO_CONVERSATION", "无法确定当前会话")
+        val state = runBlocking { runCatching { SessionStateStore.get(cid) }.getOrNull() }
+        if (state == null || state.isEmpty) {
+            return JSONObject().put("ok", true).put("empty", true).put("state", "").toString()
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("empty", false)
+            .put("state", SessionStateCodec.render(state))
+            .toString()
+    }
+
+    private fun sessionStateUpdate(args: JSONObject): String {
+        val cid = currentConversationId() ?: return errorResult("NO_CONVERSATION", "无法确定当前会话")
+        val state = SessionState(
+            objective = args.optString("objective"),
+            completed = args.optJSONArray("completed").stringList(),
+            pending = args.optJSONArray("pending").stringList(),
+            decisions = args.optJSONArray("decisions").stringList(),
+        )
+        runBlocking { runCatching { SessionStateStore.set(cid, state) } }
+        return JSONObject().put("ok", true).put("saved", true).toString()
+    }
+
+    private fun JSONArray?.stringList(): List<String> =
+        if (this == null) emptyList() else (0 until length()).mapNotNull { optString(it).takeIf { s -> s.isNotBlank() } }
 
     private fun browserUse(args: JSONObject, toolCallId: String): AgentModelClient.ToolResult {
         if (!browserToolsEnabled()) {
