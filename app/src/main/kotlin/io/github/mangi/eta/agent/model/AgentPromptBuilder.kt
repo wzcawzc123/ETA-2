@@ -15,6 +15,7 @@ internal object AgentPromptBuilder {
         skillContext: SkillContext,
         memoryContext: AgentMemoryContext = AgentMemoryContext.DISABLED,
         conversationSummary: String? = null,
+        sessionState: String? = null,
     ): JSONArray {
         val messages = JSONArray()
         if (config.systemPrompt.isNotBlank()) {
@@ -112,6 +113,10 @@ internal object AgentPromptBuilder {
         buildMemorySystemMessage(memoryContext)?.let(messages::put)
         buildSkillSystemMessage(skillContext)?.let(messages::put)
         buildConversationSummaryMessage(conversationSummary)?.let(messages::put)
+        // 当前会话结构状态（目标/已完成/待办/决定）：注入让 agent 始终知道"做到哪/决定过什么"。
+        if (!sessionState.isNullOrBlank()) {
+            messages.put(systemMessage("<session_state>\n$sessionState\n</session_state>"))
+        }
         // 长对话按 contextWindow token 预算做滑动窗口裁剪（只影响注入副本，UI/持久化保持全量）。
         val windowedHistory = AgentHistoryWindow.trim(history, config.contextWindow)
         windowedHistory.forEach { item ->

@@ -78,6 +78,7 @@ internal object AgentRuntimeWire {
     private const val KEY_TYPE = "type"
     private const val KEY_RUN_ID = "run_id"
     private const val KEY_CONVERSATION_SUMMARY = "conversation_summary"
+    private const val KEY_SESSION_STATE = "session_state"
     private const val KEY_PROMPT = "prompt"
     private const val KEY_PROVIDER_ID = "provider_id"
     private const val KEY_PROVIDER_NAME = "provider_name"
@@ -147,6 +148,7 @@ internal object AgentRuntimeWire {
         val images: List<AgentModelClient.ModelImage>,
         val history: List<AgentModelClient.ConversationMessage> = emptyList(),
         val conversationSummary: String? = null,
+        val sessionState: String? = null,
         val handoff: EntryHandoff? = null
     )
 
@@ -245,6 +247,7 @@ internal object AgentRuntimeWire {
         putString(KEY_PROMPT, request.prompt)
         // 摘要 ≤2000 字符（约 2KB），相对 768KB parcel 预算可忽略；历史本身才是大头。
         request.conversationSummary?.let { putString(KEY_CONVERSATION_SUMMARY, it) }
+        request.sessionState?.let { putString(KEY_SESSION_STATE, it) }
         putString(KEY_PROVIDER_ID, request.config.providerId)
         putString(KEY_PROVIDER_NAME, request.config.providerName)
         putString(KEY_PROVIDER_TYPE, request.config.providerType)
@@ -358,6 +361,7 @@ internal object AgentRuntimeWire {
             runId = bundle.getString(KEY_RUN_ID).orEmpty(),
             prompt = bundle.getString(KEY_PROMPT).orEmpty(),
             conversationSummary = bundle.getString(KEY_CONVERSATION_SUMMARY),
+            sessionState = bundle.getString(KEY_SESSION_STATE),
             config = AgentModelClient.ModelConfig(
                 providerId = bundle.getString(KEY_PROVIDER_ID).orEmpty(),
                 providerName = bundle.getString(KEY_PROVIDER_NAME).orEmpty(),

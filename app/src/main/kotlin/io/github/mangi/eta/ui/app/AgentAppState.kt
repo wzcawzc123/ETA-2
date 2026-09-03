@@ -20,6 +20,7 @@ import io.github.mangi.eta.agent.device.DeviceLocationProvider
 import io.github.mangi.eta.agent.media.AgentImageCodec
 import io.github.mangi.eta.agent.memory.AgentMemoryContextBuilder
 import io.github.mangi.eta.agent.model.AgentConversationCodec
+import io.github.mangi.eta.agent.model.SessionStateCodec
 import io.github.mangi.eta.agent.model.AgentImageSummarizer
 import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.agent.model.AgentFileReference
@@ -55,6 +56,7 @@ import io.github.mangi.eta.data.repository.AgentMemoryRepository
 import io.github.mangi.eta.data.repository.AgentMemoryMutation
 import io.github.mangi.eta.data.repository.AgentMemoryWriteResult
 import io.github.mangi.eta.data.repository.ConversationSummaryStore
+import io.github.mangi.eta.data.repository.SessionStateStore
 import io.github.mangi.eta.data.repository.EtaBackupRepository
 import io.github.mangi.eta.data.repository.EtaBackupSummary
 import io.github.mangi.eta.data.repository.ProviderRepository
@@ -1156,6 +1158,9 @@ internal class AgentAppState(
             val conversationSummary = runCatching {
                 ConversationSummaryStore.summary(conversationId)
             }.getOrNull()
+            val sessionState = runCatching {
+                SessionStateStore.get(conversationId)?.let(SessionStateCodec::render)
+            }.getOrNull()
             val result = AgentRuntimeClient(appContext, AndroidAgentLogger).run(
                 request = AgentRuntimeWire.RunRequest(
                     runId = runId,
@@ -1164,6 +1169,7 @@ internal class AgentAppState(
                     images = modelImages,
                     history = history,
                     conversationSummary = conversationSummary,
+                    sessionState = sessionState,
                     handoff = AgentRuntimeWire.EntryHandoff(
                         id = runId,
                         source = AgentRuntimeWire.AGENT_UI_HANDOFF_SOURCE,

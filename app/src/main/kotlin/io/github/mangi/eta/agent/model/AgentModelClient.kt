@@ -91,6 +91,7 @@ internal object AgentModelClient {
         skillContext: SkillContext = SkillContext.EMPTY,
         memoryContext: AgentMemoryContext = AgentMemoryContext.DISABLED,
         conversationSummary: String? = null,
+        sessionState: String? = null,
         additionalTools: JSONArray = JSONArray(),
         onEvent: (AgentEvent) -> Unit = {}
     ): ModelResponse.Text {
@@ -103,6 +104,7 @@ internal object AgentModelClient {
             skillContext,
             memoryContext,
             conversationSummary,
+            sessionState,
         )
         if (!config.supportsVision) {
             AgentConversationCodec.stripImagesForTextOnlyModel(messages)
