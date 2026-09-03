@@ -113,14 +113,14 @@ internal object AgentPromptBuilder {
         buildMemorySystemMessage(memoryContext)?.let(messages::put)
         buildSkillSystemMessage(skillContext)?.let(messages::put)
         buildConversationSummaryMessage(conversationSummary)?.let(messages::put)
-        // 当前会话结构状态（目标/已完成/待办/决定）：注入让 agent 始终知道"做到哪/决定过什么"。
-        if (!sessionState.isNullOrBlank()) {
-            messages.put(systemMessage("<session_state>\n$sessionState\n</session_state>"))
-        }
         // 长对话按 contextWindow token 预算做滑动窗口裁剪（只影响注入副本，UI/持久化保持全量）。
         val windowedHistory = AgentHistoryWindow.trim(history, config.contextWindow)
         windowedHistory.forEach { item ->
             runCatching { AgentConversationCodec.toJsonObject(item) }.getOrNull()?.let(messages::put)
+        }
+        // 会话状态会随任务里程碑变化：放到易变尾部（历史之后、当前 user 之前），避免击穿稳定前缀缓存。
+        if (!sessionState.isNullOrBlank()) {
+            messages.put(systemMessage("<session_state>\n$sessionState\n</session_state>"))
         }
         messages.put(AgentConversationCodec.userMessage(prompt, images))
         return messages
@@ -149,8 +149,8 @@ internal object AgentPromptBuilder {
                     "检索命中后务必在答复中结合命中片段，而不只是复述查询。"
             )
             appendLine(
-                "长任务或需跨会话延续时，在“# 核心记忆”下维护“### 当前会话状态”，用“目标：… / 已完成：… / 待办：… / 决定：…”记录；" +
-                    "任务完成或用户明确放弃时清除。用户问“做到哪了/决定过什么/继续上次”时，先读取该小节再据此回答或继续。"
+                "长任务或多步骤进行到里程碑时，用 session_state_update 更新当前会话状态（目标/已完成/待办/决定）；" +
+                    "需要回顾“做到哪了/决定过什么/继续上次”时用 session_state_get。任务完成或用户明确放弃时清空。"
             )
             if (context.coreContent.isNotBlank()) {
                 appendLine()
