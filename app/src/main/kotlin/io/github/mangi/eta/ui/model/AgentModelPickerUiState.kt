@@ -113,10 +113,12 @@ internal fun latestContextUsage(
     messages: List<AgentChatMessageUi>,
     selectedModel: AgentModelOptionUi?,
 ): AgentContextUsageUi = AgentContextUsageUi(
+    // 上下文窗口占用应取"提示词（输入）token"，而非 total(input+output)——
+    // 输出是模型回复、不占上下文窗口；用 total 会把输出也计入，导致数值虚高/不准。
     contextTokens = messages.asReversed()
         .asSequence()
         .filterIsInstance<AgentMessageUi>()
-        .mapNotNull { it.usage?.contextTokens }
+        .mapNotNull { it.usage?.inputTokens }
         .firstOrNull(),
     contextWindow = selectedModel?.contextWindow,
 )

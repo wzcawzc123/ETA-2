@@ -100,9 +100,10 @@ class AgentModelPickerProjectorTest {
             contextWindow = 100_000,
         )
         val messages = listOf(
-            AgentMessageUi(id = "first", content = "one", usage = TokenUsageUi(contextTokens = 10_000)),
+            // 上下文占用按"输入(prompt) token"计（输出不占窗口）。
+            AgentMessageUi(id = "first", content = "one", usage = TokenUsageUi(inputTokens = 10_000)),
             AgentMessageUi(id = "missing", content = "two"),
-            AgentMessageUi(id = "last", content = "three", usage = TokenUsageUi(contextTokens = 82_000)),
+            AgentMessageUi(id = "last", content = "three", usage = TokenUsageUi(inputTokens = 82_000)),
         )
 
         val usage = latestContextUsage(messages, selected)
