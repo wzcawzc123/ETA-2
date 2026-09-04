@@ -152,6 +152,10 @@ internal object AgentPromptBuilder {
                 "长任务或多步骤进行到里程碑时，用 session_state_update 更新当前会话状态（目标/已完成/待办/决定）；" +
                     "需要回顾“做到哪了/决定过什么/继续上次”时用 session_state_get。任务完成或用户明确放弃时清空。"
             )
+            appendLine(
+                "当记忆（MEMORY.md 核心）出现重复/重叠/同义条目时，用 memory_consolidate 把它们合并成一条规范表述，" +
+                    "保持记忆精简、不冗余；同类信息只保留一条。"
+            )
             if (context.coreContent.isNotBlank()) {
                 appendLine()
                 appendLine("<memory_core>")

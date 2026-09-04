@@ -143,5 +143,34 @@ internal object AgentMemoryToolCatalog {
                         ),
                 ),
             )
+            .put(
+                AgentToolSchema.function(
+                    name = "memory_consolidate",
+                    description = "Merge/dedupe MEMORY.md lines that repeat or overlap semantically into one canonical entry (e.g. the same fact/phrase stated twice). Pass source_lines (1-based line numbers of the redundant lines) and a canonical string; the redundant lines are replaced by the canonical entry. Use when the memory is getting repetitive.",
+                    parameters = JSONObject()
+                        .put("type", "object")
+                        .put(
+                            "properties",
+                            JSONObject()
+                                .put(
+                                    "merges",
+                                    JSONObject()
+                                        .put("type", "array")
+                                        .put(
+                                            "items",
+                                            JSONObject()
+                                                .put("type", "object")
+                                                .put(
+                                                    "properties",
+                                                    JSONObject()
+                                                        .put("source_lines", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer")))
+                                                        .put("canonical", JSONObject().put("type", "string").put("maxLength", 600)),
+                                                ),
+                                        ),
+                                ),
+                        )
+                        .put("required", JSONArray().put("merges")),
+                ),
+            )
     }
 }

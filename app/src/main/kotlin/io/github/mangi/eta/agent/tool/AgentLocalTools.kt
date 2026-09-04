@@ -11,6 +11,9 @@ import io.github.mangi.eta.agent.device.RootShellDeviceController
 import io.github.mangi.eta.agent.device.BoundedRootCommandExecutor
 import io.github.mangi.eta.agent.model.AgentMemorySearch
 import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.agent.model.ConsolidateMerge
+import io.github.mangi.eta.agent.model.ConsolidatePlan
+import io.github.mangi.eta.agent.model.MemoryConsolidate
 import io.github.mangi.eta.agent.model.SessionState
 import io.github.mangi.eta.agent.model.SessionStateCodec
 import io.github.mangi.eta.agent.model.AgentScreenObservationContract
@@ -207,6 +210,7 @@ internal class AgentLocalTools(
                 "memory_search" -> textResult(memorySearch(args))
                 "session_state_get" -> textResult(sessionStateGet(args))
                 "session_state_update" -> textResult(sessionStateUpdate(args))
+                "memory_consolidate" -> textResult(memoryConsolidate(args))
                 "skills_list" -> textResult(skillsList(args))
                 "skills_read" -> textResult(skillsRead(args))
                 "skills_read_resource" -> textResult(skillsReadResource(args))
@@ -417,6 +421,29 @@ internal class AgentLocalTools(
                 }
             })
             .toString()
+    }
+
+    private fun memoryConsolidate(args: JSONObject): String {
+        val mergesArr = args.optJSONArray("merges") ?: return errorResult("MISSING_MERGES", "缺少 merges")
+        val merges = mutableListOf<ConsolidateMerge>()
+        for (i in 0 until mergesArr.length()) {
+            val o = mergesArr.optJSONObject(i) ?: continue
+            val lines = o.optJSONArray("source_lines")?.let { ja ->
+                (0 until ja.length()).mapNotNull { ja.optInt(it) }.toList()
+            } ?: continue
+            val canonical = o.optString("canonical").trim()
+            if (canonical.isBlank()) continue
+            merges += ConsolidateMerge(lines, canonical)
+        }
+        if (merges.isEmpty()) return errorResult("NO_MERGE", "没有有效的合并项")
+        val snapshot = AgentMemoryRepository.snapshot()
+        val merged = MemoryConsolidate.apply(ConsolidatePlan(merges), snapshot.content.split('\n'))
+        val newContent = merged.joinToString("\n")
+        if (newContent == snapshot.content) {
+            return JSONObject().put("ok", true).put("changed", false).toString()
+        }
+        AgentMemoryRepository.replaceAll(newContent)
+        return JSONObject().put("ok", true).put("changed", true).toString()
     }
 
     private fun sessionStateGet(args: JSONObject): String {
