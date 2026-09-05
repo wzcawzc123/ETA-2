@@ -17,11 +17,13 @@ class AgentPromptBuilderTest {
             val config = modelConfig(providerPrompt, terminalTools = false, browserTools = false)
                 .copy(model = "provider/model-a", modelDisplayName = "显示名称")
             for (modelId in listOf(config.model, "provider/model-b")) {
-                val messages = AgentPromptBuilder.buildSystemMessages(
+                val messages = AgentPromptBuilder.buildInitialMessages(
                     config = config.copy(model = modelId),
+                    prompt = "身份确认",
+                    images = emptyList(),
+                    history = emptyList(),
                     skillContext = SkillContext.EMPTY,
                     memoryContext = AgentMemoryContext.DISABLED,
-                    rootAvailable = false,
                 )
 
                 val identity = messages.systemContents().single { it.contains("当前配置的模型：") }
