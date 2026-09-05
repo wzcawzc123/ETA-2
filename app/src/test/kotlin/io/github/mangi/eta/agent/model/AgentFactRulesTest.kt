@@ -65,4 +65,34 @@ class AgentFactRulesTest {
         val merged = AgentFactRules.dedupeAndClamp(facts, existingMemory = "")
         assertEquals(1, merged.size)
     }
+
+    @Test
+    fun parsePlanClassifiesAddUpdateSkipAndValidatesLine() {
+        val text = "ADD: 用户住在北京\n" +
+            "UPDATE 2: 用户是一名AI产品经理\n" +
+            "SKIP\n" +
+            "ADD 用户喜欢咖啡\n" +
+            "UPDATE 99: 越界行应被丢弃"
+        val plan = AgentFactRules.parsePlan(text, existingLineCount = 3)
+        assertEquals(listOf("用户住在北京", "用户喜欢咖啡"), plan.additions)
+        assertEquals(listOf(FactWriteUpdate(2, "用户是一名AI产品经理")), plan.updates)
+        assertTrue(plan.noop.isNotEmpty())
+        // 越界行号不进更新，避免改写/删除错误行。
+        assertTrue(plan.updates.none { it.startLine == 99 })
+    }
+
+    @Test
+    fun parsePlanHandlesLowercaseAndColonVariants() {
+        val plan = AgentFactRules.parsePlan("add:用户住在杭州", existingLineCount = 1)
+        assertEquals(listOf("用户住在杭州"), plan.additions)
+    }
+
+    @Test
+    fun buildPlanPromptIncludesExistingLinesAndRules() {
+        val prompt = AgentFactRules.buildPlanPrompt("hi", "", listOf("- [沉淀] 用户住在上海"))
+        assertTrue(prompt.contains("【已存在记忆行】"))
+        assertTrue(prompt.contains("1: 用户住在上海"))
+        assertTrue(prompt.contains("UPDATE"))
+        assertTrue(prompt.contains("SKIP"))
+    }
 }

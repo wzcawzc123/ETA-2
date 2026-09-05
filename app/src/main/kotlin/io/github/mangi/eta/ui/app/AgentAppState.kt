@@ -29,8 +29,10 @@ import io.github.mangi.eta.agent.model.AgentFileReferencePolicy
 import io.github.mangi.eta.agent.model.AgentFileReferencePromptCodec
 import io.github.mangi.eta.agent.model.AgentHistorySummary
 import io.github.mangi.eta.agent.model.AgentHistoryWindow
-import io.github.mangi.eta.agent.model.MemoryDistillRules
+import io.github.mangi.eta.agent.model.MemoryAutoConsolidator
 import io.github.mangi.eta.agent.model.LlmAgentFactExtractor
+import io.github.mangi.eta.agent.model.OnnxMemoryEmbedder
+import io.github.mangi.eta.agent.model.VectorMath
 import io.github.mangi.eta.agent.model.LlmConversationSummarizer
 import io.github.mangi.eta.agent.model.ProviderClientFactory
 import io.github.mangi.eta.agent.runtime.AgentEvent
@@ -1253,6 +1255,8 @@ internal class AgentAppState(
      * P3：自动事实沉淀（默认关闭）。run 成功后从用户输入与回答提取稳定事实，
      * 去重后经 MEMORY.md 原子写追加（revision 冲突则放弃），全程静默失败。
      */
+    private fun cleanMemoryLine(line: String): String =
+        line.trim().removePrefix("- ").removePrefix("• ").replace("[沉淀]", "").trim()
     private fun maybeDistillFacts(
         conversationId: String,
         userText: String,
@@ -1264,12 +1268,32 @@ internal class AgentAppState(
                 if (!SettingsDataStore.settings().factDistillEnabled) return@launch
                 val config = RuntimeConfigRepository.currentRuntimeConfig() ?: return@launch
                 val extractor = LlmAgentFactExtractor(config, ProviderClientFactory.getClient(config))
-                val facts = extractor.extractFacts(userText, result.content)
-                if (facts.isEmpty()) return@launch
                 val snapshot = AgentMemoryRepository.snapshot()
-                // Mem0 式：判定 add/update/noop，而非无脑追加（防重复堆积、实现"更新/合并"而非堆副本）。
-                val plan = MemoryDistillRules.plan(facts, snapshot.content.split('\n'))
-                if (plan.additions.isEmpty() && plan.updates.isEmpty()) return@launch
+                val memoryLines = snapshot.content.split('\n')
+                // 第 3 层：向量候选粗筛。嵌入可用且记忆行较多时，只挑与本轮最相关的 topK 行交给 LLM 判重
+                // （既抓得住语义近重复，又限制 prompt 体积、避免无关行干扰分类）。
+                val memoryEntryCount = memoryLines.count { it.trim().startsWith("-") || it.trim().startsWith("•") }
+                val candidateLines: List<String> = if (memoryEntryCount > DEDUP_CANDIDATE_MIN) {
+                    runCatching {
+                        val embedder = OnnxMemoryEmbedder.get(appContext)
+                        if (embedder != null) {
+                            val queryVec = embedder.embed(userText)
+                            val lineVecs = memoryLines.map { embedder.embed(cleanMemoryLine(it)) }
+                            if (queryVec != null && lineVecs.none { it == null }) {
+                                val idx = VectorMath.topK(
+                                    queryVec,
+                                    lineVecs.mapNotNull { it },
+                                    DEDUP_CANDIDATE_MAX,
+                                )
+                                idx.map { memoryLines[it] }
+                            } else memoryLines
+                        } else memoryLines
+                    }.getOrElse { memoryLines }
+                } else memoryLines
+                // 语义判重：一次 LLM 调用同时"抽事实 + 对照记忆行判定 ADD/UPDATE/SKIP"。
+                // 同义/重叠/换词重述会走 UPDATE 或 SKIP，不再是字符启发式漏判导致的重复沉淀。
+                val plan = extractor.extractPlan(userText, result.content, candidateLines)
+                if (plan.isEmpty) return@launch
                 var revision = snapshot.revision
                 // 先"覆盖/更新"已有行：每次用最新 revision，冲突则整体放弃（静默，与既有行为一致）。
                 for (update in plan.updates) {
@@ -1294,6 +1318,8 @@ internal class AgentAppState(
                         is AgentMemoryWriteResult.Conflict -> Unit
                     }
                 }
+                // 第 2 层：记忆条数超阈值时后台自动合并（不等 agent 手动调 memory_consolidate）。
+                runCatching { MemoryAutoConsolidator.consolidate(config, ProviderClientFactory.getClient(config)) }
             }
         }
     }
@@ -2421,6 +2447,9 @@ internal class AgentAppState(
         const val MAX_PREVIEW_CHARS = 48
         const val LEGACY_STOPPED_ERROR = "已停止"
         const val SYNTHETIC_STATUS_STOPPED = "eta_status:stopped"
+        // 第 3 层向量判重候选粗筛：记忆条目超过 MIN 才启用，只取最相关的 MAX 行进 LLM。
+        const val DEDUP_CANDIDATE_MIN = 12
+        const val DEDUP_CANDIDATE_MAX = 12
         // 数据状态以较粗粒度发布，文字显现由独立的帧时钟连续推进。
         // 这与 Kimi 将流式数据和视觉动画分层的做法一致。
         const val STREAM_UI_UPDATE_INTERVAL_MS = 80L
