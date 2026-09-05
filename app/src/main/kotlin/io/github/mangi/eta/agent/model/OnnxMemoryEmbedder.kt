@@ -53,9 +53,11 @@ internal class OnnxMemoryEmbedder private constructor(
     fun embed(text: String): FloatArray? = runCatching {
         val t = tokenizer.encode(text.take(512))
         val shape = longArrayOf(1, MAX_SEQ.toLong())
-        val idTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(t.inputIds.toLongArray()), shape)
-        val maskTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(t.attentionMask.toLongArray()), shape)
-        val typeTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(t.tokenTypeIds.toLongArray()), shape)
+        // 手动转 LongArray，避免个别 Kotlin/Gradle 组合下 IntArray.toLongArray() 扩展不可见。
+        fun intsToLong(src: IntArray): LongArray = LongArray(src.size) { src[it].toLong() }
+        val idTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(intsToLong(t.inputIds)), shape)
+        val maskTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(intsToLong(t.attentionMask)), shape)
+        val typeTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(intsToLong(t.tokenTypeIds)), shape)
         val inputs = mapOf(
             "input_ids" to idTensor,
             "attention_mask" to maskTensor,
@@ -63,7 +65,8 @@ internal class OnnxMemoryEmbedder private constructor(
         )
         try {
             val outputs = session.run(inputs)
-            val hidden = outputs.getValue("last_hidden_state")
+            // 显式 cast 到 OnnxTensor，规避 run 返回类型随 onnxruntime 版本变化导致 .floatBuffer 解析失败。
+            val hidden = outputs.getValue("last_hidden_state") as OnnxTensor
             val fb = hidden.floatBuffer
             val seqFlat = FloatArray(fb.remaining())
             fb.get(seqFlat)
