@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,6 +90,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.exp
@@ -391,7 +393,7 @@ internal fun AgentConversationMessages(
     }
     // 流式消息的渲染会话按 id 提升到列表层持有：item 滚出视口被 LazyColumn 销毁后，
     // 滑回时复用同一解析会话与打字机进度，避免整段内容重新解析并重放显现动画。
-    val streamingMarkdownStates = remember { mutableMapOf<String, StreamingMarkdownState>() }
+    val streamingMarkdownStates = remember { mutableStateMapOf<String, StreamingMarkdownState>() }
     val bottomItemIndex = timelineEntries.size
     val isUserDragging by scrollState.interactionSource.collectIsDraggedAsState()
     val isAtBottom by remember(scrollState) {
@@ -415,11 +417,34 @@ internal fun AgentConversationMessages(
         }
     }
 
+    val tailMessage = visibleMessages.lastOrNull() as? AgentMessageUi
+    val isTailRendering = tailMessage?.let { message ->
+        streamingMarkdownStates[message.id]?.let { state ->
+            state.revealedContent != message.content
+        }
+    } == true
+    var isBottomSettling by remember { mutableStateOf(isStreaming) }
+
+    LaunchedEffect(isStreaming, isTailRendering, keepBottomAnchored, isUserDragging) {
+        if (!keepBottomAnchored || isUserDragging) {
+            isBottomSettling = false
+        } else if (isStreaming || isTailRendering) {
+            isBottomSettling = true
+        } else if (isBottomSettling) {
+            // 显现完成后还会切换稳定排版并插入操作行，等其完成测量再收口跟底。
+            withFrameNanos { }
+            withFrameNanos { }
+            snapshotFlow { !scrollState.canScrollForward }.first { it }
+            isBottomSettling = false
+        }
+    }
+
     val shouldFollowBottom by rememberUpdatedState(
         resolveBottomFollowEnabled(
             isStreaming = isStreaming,
             keepBottomAnchored = keepBottomAnchored,
             isUserDragging = isUserDragging,
+            isBottomSettling = isBottomSettling,
         )
     )
     val currentBottomItemIndex by rememberUpdatedState(bottomItemIndex)
@@ -443,7 +468,7 @@ internal fun AgentConversationMessages(
         }
     }
 
-    // 仅在流式输出期间发布最新的跟底距离。历史消息中的步骤/思考展开同样会改变
+    // 流式输出及渲染收尾期间发布最新的跟底距离。历史消息中的步骤/思考展开同样会改变
     // 列表高度，但那是用户主动查看内容，不能被误判成尾部文字增长。
     LaunchedEffect(scrollState) {
         snapshotFlow {
@@ -522,7 +547,7 @@ internal fun AgentConversationMessages(
                 val latest = bottomFollowDecisions.tryReceive().getOrNull() ?: break
                 accept(latest)
             }
-            if (requestIndex != null || remainingDistancePx <= 0f) continue
+            if (!shouldFollowBottom || requestIndex != null || remainingDistancePx <= 0f) continue
 
             val step = smoothBottomFollowStep(
                 distancePx = remainingDistancePx,
@@ -914,7 +939,8 @@ internal fun resolveBottomFollowEnabled(
     isStreaming: Boolean,
     keepBottomAnchored: Boolean,
     isUserDragging: Boolean,
-): Boolean = isStreaming && keepBottomAnchored && !isUserDragging
+    isBottomSettling: Boolean = false,
+): Boolean = (isStreaming || isBottomSettling) && keepBottomAnchored && !isUserDragging
 
 internal fun shouldRequestInitialBottom(
     isStreaming: Boolean,
