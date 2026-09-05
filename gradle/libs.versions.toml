@@ -20,7 +20,6 @@ room = "2.8.4"
 junit = "4.13.2"
 json = "20260522"
 robolectric = "4.16.1"
-onnxruntime = "1.19.2"
 
 [libraries]
 libxposed-api = { group = "io.github.libxposed", name = "api", version.ref = "libxposedApi" }
@@ -51,7 +50,6 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
-onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
