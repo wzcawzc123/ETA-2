@@ -65,9 +65,10 @@ internal class OnnxMemoryEmbedder private constructor(
         )
         try {
             val outputs = session.run(inputs)
-            // 显式 cast 到 OnnxTensor，规避 run 返回类型随 onnxruntime 版本变化导致 .floatBuffer 解析失败。
-            val hidden = outputs.getValue("last_hidden_state") as OnnxTensor
-            val fb = hidden.floatBuffer
+            // 用 Java Map.get + OnnxTensor.getFloatBuffer() 显式方法，绕开 Kotlin getValue 扩展 /
+            // 合成属性(ftfloatBuffer) 在 onnxruntime 1.19.2 + Kotlin 2.4.10 下的互操作解析问题。
+            val hidden = outputs.get("last_hidden_state") as OnnxTensor
+            val fb = hidden.getFloatBuffer()
             val seqFlat = FloatArray(fb.remaining())
             fb.get(seqFlat)
             // CLS 池化：batch0 的 seq index0 → 前 512 个 float
