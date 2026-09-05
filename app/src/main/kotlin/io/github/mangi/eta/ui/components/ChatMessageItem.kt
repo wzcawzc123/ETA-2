@@ -54,8 +54,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -155,7 +156,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -348,10 +348,11 @@ internal fun AgentWorkProcess(
     } as? ToolActivityMessageUi
     val runningToolTitle = runningTool?.argumentsSummary?.takeIf { it.isNotBlank() }
         ?: runningTool?.let { toolDisplayName(it.toolName) }
-    var expanded by remember(id) { mutableStateOf(running) }
+    var expanded by rememberSaveable(id) { mutableStateOf(running) }
+    var manuallyExpanded by rememberSaveable(id) { mutableStateOf(false) }
 
     LaunchedEffect(running) {
-        if (running) {
+        if (running && !manuallyExpanded) {
             expanded = true
         }
     }
@@ -375,7 +376,10 @@ internal fun AgentWorkProcess(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
+                .clickable {
+                    manuallyExpanded = true
+                    expanded = !expanded
+                }
                 .padding(horizontal = 13.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -849,7 +853,8 @@ private fun StableMarkdown(
 internal class StreamingMarkdownState {
     var revealedContent by mutableStateOf<String?>(null)
     val parserSession = StreamingGfmParserSession()
-    val revealCoordinator = SmoothTextRevealCoordinator()
+    val revealCoordinator = SmoothTextRevealCoordinator().apply { pauseAnimationsAndCatchUp() }
+    val restoreState = StreamingMarkdownRestoreState()
     val parseTargets = Channel<StreamingMarkdownTarget>(Channel.CONFLATED)
     val acceptedContent = arrayOf("")
     var snapshot by mutableStateOf<StreamingGfmSnapshot?>(null)
@@ -876,24 +881,15 @@ private fun StreamingMarkdown(
     val acceptedContent = state.acceptedContent
     val currentRevealCompleteCallback by rememberUpdatedState(onRevealCompleteChange)
     val snapshot = state.snapshot
-    val lifecycleScope = rememberCoroutineScope()
+    val currentContent by rememberUpdatedState(content)
+    val currentIsStreaming by rememberUpdatedState(isStreaming)
+    val restoreGeneration = state.restoreState.generation
 
     LifecycleResumeEffect(state) {
-        val catchUpJob = if (revealCoordinator.isAnimationPaused) {
-            // ON_START 后恢复的首批重组和排版仍可能携带后台积压内容。保留两个绘制帧的
-            // 追平窗口，等这些块全部登记后再恢复动画，之后的新增量仍按正常速度显现。
-            lifecycleScope.launch {
-                revealCoordinator.pauseAnimationsAndCatchUp()
-                withFrameNanos { }
-                revealCoordinator.pauseAnimationsAndCatchUp()
-                withFrameNanos { }
-                revealCoordinator.resumeAnimationsAfterCatchUp()
-            }
-        } else {
-            null
-        }
+        revealCoordinator.pauseAnimationsAndCatchUp()
+        state.restoreState.begin(currentContent)
         onPauseOrDispose {
-            catchUpJob?.cancel()
+            state.restoreState.pause()
             revealCoordinator.pauseAnimationsAndCatchUp()
         }
     }
@@ -944,9 +940,15 @@ private fun StreamingMarkdown(
         }
     }
 
-    LaunchedEffect(snapshot?.originalSource, snapshot?.isComplete, revealCoordinator) {
+    LaunchedEffect(content, isStreaming, snapshot?.originalSource, snapshot?.isComplete, revealCoordinator) {
         val currentSnapshot = snapshot
-        if (currentSnapshot?.isComplete != true) {
+        if (!isStreamingMarkdownTargetComplete(
+                content = content,
+                isStreaming = isStreaming,
+                snapshotContent = currentSnapshot?.originalSource,
+                snapshotComplete = currentSnapshot?.isComplete == true,
+            )
+        ) {
             currentRevealCompleteCallback(false)
             return@LaunchedEffect
         }
@@ -956,7 +958,15 @@ private fun StreamingMarkdown(
         if (!revealCoordinator.drained.value) {
             revealCoordinator.drained.filter { it }.first()
         }
-        currentRevealCompleteCallback(true)
+        if (isStreamingMarkdownTargetComplete(
+                content = currentContent,
+                isStreaming = currentIsStreaming,
+                snapshotContent = currentSnapshot?.originalSource,
+                snapshotComplete = currentSnapshot?.isComplete == true,
+            )
+        ) {
+            currentRevealCompleteCallback(true)
+        }
     }
 
     snapshot?.let { parsed ->
@@ -968,7 +978,17 @@ private fun StreamingMarkdown(
             dimens = chatMarkdownDimens(),
             components = components,
             animations = markdownAnimations(animateTextSize = { this }),
-            modifier = modifier,
+            modifier = modifier.onGloballyPositioned {
+                // 恢复基线对应的 AST 真正排版后才开放增量动画，解析耗时不受帧数限制。
+                if (state.restoreState.completeLayout(
+                        generation = restoreGeneration,
+                        renderedContent = parsed.originalSource,
+                        currentContent = currentContent,
+                    )
+                ) {
+                    revealCoordinator.resumeAnimationsAfterCatchUp()
+                }
+            },
             success = { state, successComponents, successModifier ->
                 StreamingGfmSuccess(
                     state = state,
@@ -2032,7 +2052,8 @@ private fun ThinkingRow(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    var expanded by remember(message.id) { mutableStateOf(!message.collapsed) }
+    var expanded by rememberSaveable(message.id) { mutableStateOf(!message.collapsed) }
+    var manuallyExpanded by rememberSaveable(message.id) { mutableStateOf(false) }
     // 思考结束后立即切换为与完成态回答相同的稳定 Markdown。工具执行期间 App 可能
     // 处于后台，不能让旧思考保留显现债务，回来后在新回答旁边补播整段内容。
     val streamingState = if (message.isStreaming) {
@@ -2041,7 +2062,7 @@ private fun ThinkingRow(
         null
     }
     LaunchedEffect(message.isStreaming) {
-        if (message.isStreaming) expanded = true
+        if (message.isStreaming && !manuallyExpanded) expanded = true
     }
 
     // Markdown 状态在行级提前创建：行进入组合（工作过程展开或滚动到可视区）时就开始
@@ -2087,7 +2108,10 @@ private fun ThinkingRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .clickable { expanded = !expanded }
+                .clickable {
+                    manuallyExpanded = true
+                    expanded = !expanded
+                }
                 .padding(horizontal = if (compact) 4.dp else 13.dp, vertical = if (compact) 6.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -2188,7 +2212,7 @@ private fun ToolActivityInline(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    var isExpanded by remember(message.id) { mutableStateOf(false) }
+    var isExpanded by rememberSaveable(message.id) { mutableStateOf(false) }
     // 只有「当前浏览器」卡片订阅实时会话快照，避免每个工具行都跟随快照重组
     val browserSnapshot = if (showBrowserShortcut) {
         AgentBrowserSession.snapshots.collectAsState().value
